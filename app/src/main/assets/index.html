@@ -125,6 +125,12 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .mult button[data-m="2"][aria-pressed="true"]{background:var(--green);color:var(--sisal)}
 .mult button[data-m="3"][aria-pressed="true"]{background:var(--red);color:var(--sisal)}
 .tkeys{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.nkeys{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.nkeys .k{font-size:24px;padding:10px 0}
+.mult.tabs{grid-template-columns:1fr 1fr}
+.tabs button{font-size:15px}
+.left{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.left .finish{font-size:18px}
 .darts{display:flex;gap:8px;min-height:44px}
 .darts span{flex:1;border:1px dashed var(--line);border-radius:10px;display:grid;place-items:center;font-family:var(--f-num);font-weight:800;font-size:24px;color:var(--muted)}
 .darts span.f{border-style:solid;color:var(--sisal)}
@@ -205,6 +211,9 @@ let rev=0;
 let draft="";          // saisie x01 en cours
 let darts=[];          // saisie cricket en cours
 let mult=1;
+let x01Mode=store.get("oche.x01mode","darts");
+const dv=t=>t==="M"?0:({S:1,D:2,T:3})[t[0]]*(+t.slice(1));
+const dl=t=>t==="M"?"—":t==="S25"?"25":t==="D25"?"Bull":t;
 let errMsg="";
 let room=null;
 
@@ -374,6 +383,16 @@ function padHTML(c){
   const md=c.md,p=c.P[c.cur];
   let body="",hint="";
   if(md.kind==="x01"){
+    const tabs=`<div class="mult tabs"><button type="button" id="xm-darts" data-xm="darts" aria-pressed="${x01Mode==="darts"}">Fléchette par fléchette</button><button type="button" id="xm-total" data-xm="total" aria-pressed="${x01Mode==="total"}">Total de la volée</button></div>`;
+    if(x01Mode==="darts"){
+      const tot=darts.reduce((a,t)=>a+dv(t),0),left=p.rem-tot;
+      hint=`Volée ${tot}`;
+      body=`${tabs}<div class="darts">${[0,1,2].map(i=>`<span class="${darts[i]?"f":""}">${darts[i]?dl(darts[i]):"Fléchette "+(i+1)}</span>`).join("")}</div>
+      <div class="left"><span class="lbl" style="margin:0">Reste ${left}</span>${FIN[left]&&left<=170?`<span class="finish">${FIN[left]}</span>`:""}</div>
+      <div class="mult">${[[1,"Simple"],[2,"Double"],[3,"Triple"]].map(([m,l])=>`<button type="button" id="mu-${m}" data-m="${m}" aria-pressed="${mult===m}">${l}</button>`).join("")}</div>
+      <div class="nkeys">${Array.from({length:20},(_,i)=>i+1).map(n=>`<button class="k" type="button" id="d-${n}" data-d="${n}">${n}</button>`).join("")}</div>
+      <div class="tkeys"><button class="k" type="button" id="d-25" data-d="25">Bull</button><button class="k" type="button" id="d-0" data-d="0">Raté</button><button class="k del" type="button" id="d-del">⌫</button><button class="k ok" type="button" id="d-ok">OK</button></div>`;
+    }else{
     const v=draft===""?null:+draft;
     const warn=v!==null&&(v>180||IMPOSSIBLE.has(v));
     const bust=v!==null&&!warn&&v>p.rem;
@@ -382,6 +401,8 @@ function padHTML(c){
     <div class="quick">${[26,41,45,60,81,85,100,121,140,180].map(q=>`<button type="button" id="q-${q}" data-q="${q}">${q}</button>`).join("")}</div>
     <div class="keys">${[7,8,9,4,5,6,1,2,3].map(k=>`<button class="k" type="button" id="k-${k}" data-k="${k}">${k}</button>`).join("")}
     <button class="k del" type="button" id="k-del" aria-label="Effacer">⌫</button><button class="k" type="button" id="k-0" data-k="0">0</button><button class="k ok" type="button" id="k-ok">OK</button></div>`;
+    body=tabs+body;
+    }
   }else if(md.kind==="cricket"){
     hint=`Points ${p.pts}`;
     body=`<div class="darts">${[0,1,2].map(i=>`<span class="${darts[i]?"f":""}">${darts[i]?(darts[i]==="M"?"—":darts[i].replace("S25","B").replace("D25","DB")):"Fléchette "+(i+1)}</span>`).join("")}</div>
@@ -408,6 +429,16 @@ function bindGame(){
   app.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>{draft=b.dataset.q;errMsg="";render()});
   on("k-del",()=>{draft=draft.slice(0,-1);render()});
   on("k-ok",submitX01);
+  app.querySelectorAll("[data-xm]").forEach(b=>b.onclick=()=>{x01Mode=b.dataset.xm;store.set("oche.x01mode",x01Mode);draft="";darts=[];mult=1;errMsg="";render()});
+  app.querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{
+    if(darts.length>=3)return;const t=+b.dataset.d;
+    if(t===0)darts.push("M");else{if(t===25&&mult===3){errMsg="Pas de triple sur le bull.";render();return}darts.push(({1:"S",2:"D",3:"T"})[mult]+t)}
+    mult=1;errMsg="";
+    const c=compute(game),p=c.P[c.cur],tot=darts.reduce((a,x)=>a+dv(x),0);
+    if(tot>=p.rem||darts.length===3)addVisit(tot);else render();
+  });
+  on("d-del",()=>{darts.pop();render()});
+  on("d-ok",()=>{addVisit(darts.reduce((a,x)=>a+dv(x),0))});
   app.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{mult=+b.dataset.m;render()});
   app.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{
     if(darts.length>=3)return;const t=+b.dataset.t;
@@ -430,7 +461,7 @@ document.addEventListener("keydown",e=>{
   const dirs={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]};
   const d=dirs[e.key];
   if(!d){
-    if(game&&/^[0-9]$/.test(e.key)&&MODES[game.mode].kind==="x01"&&document.activeElement.tagName!=="INPUT"){if(draft.length<3){draft=(draft+e.key).replace(/^0+(?=\d)/,"");render()}}
+    if(game&&/^[0-9]$/.test(e.key)&&MODES[game.mode].kind==="x01"&&x01Mode==="total"&&document.activeElement.tagName!=="INPUT"){if(draft.length<3){draft=(draft+e.key).replace(/^0+(?=\d)/,"");render()}}
     return;
   }
   const a=document.activeElement;
