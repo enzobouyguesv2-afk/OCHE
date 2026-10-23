@@ -1,0 +1,591 @@
+/* LE MAÎTRE DES MOTS — moteur de règles (autorité de la partie).
+   Tourne sur la télé. Aucune interface ici : uniquement l'état, les règles et les vues filtrées.
+   Fichier servi sous /mm-engine.js (stocké en .txt pour passer les filtres de messagerie). */
+(function (root, factory) {
+  const M = factory();
+  if (typeof module === "object" && module.exports) module.exports = M; else root.MM = M;
+})(typeof self !== "undefined" ? self : this, function () {
+  "use strict";
+
+  /* ---------- Dictionnaire ---------- */
+  const WORDS = "abbaye abeille abricot accent accordéon acier acrobate aéroport affiche agenda agneau aigle aiguille ail aileron aimant alarme album algue alligator allumette alpage amande ambassade ambulance amiral ampoule ananas ancre âne ange anguille anneau anniversaire antenne appareil aquarium araignée arbitre arbre arc arche ardoise aréna argent arlequin armoire armure arrosoir artichaut ascenseur asperge assiette astronaute atelier atlas atome aube autruche avalanche avenue avion avocat bac bagage bague baguette baignoire bain balai balance balcon baleine ballon bambou banane banc bandit banque baobab barbe barque barrage barreau basilic bassin bassine bateau bâton batterie bébé bec béret berger bermuda betterave beurre biberon bibliothèque bigoudi bijou billard bille biscuit bison blason blé blouse bobine bocal bœuf bois boîte bol bonbon bonhomme bonnet borne bosse botte bouche boucher boucle boudin bouée bougie bouillon boulanger boule bouquet boussole bouteille bouton boxe boxeur bracelet branche bras brique brochet brocoli brosse brouillard buffet buisson bulle bureau but cabane cacao cactus cadeau cadenas café cafetière cage cagoule cahier caillou caisse calculatrice calendrier caméléon camembert camion campagne canal canapé canard canne canot cape capitaine caramel caravane carnaval carotte carrefour carrosse carte carton cascade cascadeur casino casque casserole castagnettes castor catapulte cathédrale cave caverne ceinture céleri cendre cercle cerf cerise cerveau chaîne chaise chalet chameau chamois champagne champignon chandail chandelle chant chapeau charbon chariot charpentier château chaton chaussette chef chemin cheminée chemise chêne chenille cheval chèvre chiffre chocolat chorale chou chouette cible cidre ciel cigale cigogne cinéma cirque ciseaux citadelle citron citrouille clairon classe clavier clé clémentine cloche clocher clou clown cobra coccinelle cochon cockpit cocotier code cœur coffre colis colle collège collier colline colombe comète commode compas compote comptoir concert concombre confiture coq coquillage corail corbeau corde corne cornemuse cornichon costume côte coton cou coude couronne courrier coussin couteau couvercle crabe craie crâne cravate crayon crème crêpe crinière cristal crocodile croissant croix cube cuillère cuir cuisine cyclone cyclope cygne dalle danse dauphin dé dentelle dentiste désert dessert détective diable diadème diamant dictionnaire dinosaure dirigeable disque docteur doigt domino donjon dortoir dossier douane dragon drapeau dromadaire dune eau écharpe échelle échiquier éclair écluse école écorce écran écrou écureuil édredon église égout éléphant élève émeraude empereur enclume encre engrenage entonnoir enveloppe épée épice épingle éponge épouvantail équerre ermite escalier escargot escrime espion étable étagère étang étau étoffe étoile éventail évier fable façade facteur fakir falaise fanfare fantôme farandole farine faucon fauteuil fée fenêtre fenouil fer ferme feu feuille feutre fève ficelle figue filet flacon flamant flamme flaque flèche fleuve flocon flûte foin fontaine football forêt forge fossile fouet fougère four fourchette fourmi fourreau fraise framboise frein frigo frite fromage fumée fusée gant garage gare gâteau gaufre gaufrette gazelle gazon géant gendarme genou gilet girafe glace glacier gland globe gobelet gomme gondole gorille goudron gouffre gourde goutte graine grêle grenier grenouille griffe grille grotte grue guépard guêpe guirlande guitare gymnase hache hamac hamster haricot harpe hautbois hélice hélicoptère herbe hérisson hermine hibou hippopotame histoire hiver homard hôpital horloge hôtel hotte hublot huile huître hutte iceberg icône igloo île image imprimante infirmière insecte jaguar jambon jardin jet jeton jockey jongleur jonquille jouet journal joyau judo jumelles jungle jupe jus kangourou kayak ketchup kimono kiwi klaxon koala laboratoire lac laine lait lama lampe langue lanterne lapin laser lasso lavabo lavande légume lettre levure lézard libellule licorne lierre limace lime limonade linge lingot lion lit livre locomotive loup loupe loutre luge lune lunettes luth lys machine madeleine magasin magicien magnet maillot main maïs maison mammouth mandarine manège mangue manteau marais marché marée marelle mariage marin marionnette marmite marteau mascotte masque mât match matelas médaille médecin méduse melon menthe mer meringue mésange métro meule meunier micro miel mine miroir mitaine momie monnaie montagne montre mosaïque motard moteur mouche mouchoir moufle moule moulin mousquetaire moustache moustique mouton muguet mur muraille muscade musée myrtille nappe narval navet navette neige nid ninja noisette noix note nougat nouille nounours nuage nuit oasis obélisque océan œil œuf ogre oie oignon oiseau olive ombre ongle opéra opticien orage orange orchestre orchidée ordinateur oreille oreiller orgue ortie os ours ourson outil ovni page paille pain palais palette palmier pamplemousse panda panier panneau pantalon pantoufle paon papaye papillon parachute parapluie parasol parc parchemin parfum passeport passerelle pastèque patate pâte patin paupière pavé pédale peigne peinture pélican pelle pendule péniche pépite perle perroquet pétale pharaon phare phoenix phoque piano pic pied piège pierre pieuvre pigeon pile pilier pilote piment pin pince pinceau pingouin pioche pion pique pirate piscine pistache piste pizza placard plage planète plante plateau plombier plume pneu poche poêle poignée poing poire poireau poisson poivre poivron police polo pommade pomme pompier pont porc portail porte poste pot potager poubelle poule poulpe poupée poussin prairie prince prison prune puce puits pull puzzle pyjama pyramide quai quartier quille radar radeau radio radis raisin rame rampe rapace raquette rasoir rat râteau récif récolte refuge règle reine remorque rempart renard requin réservoir réveil rhinocéros rideau rivière robe robinet robot rocher roi roman rose roseau roue rouleau ruban rubis ruche rue ruisseau sable sabot sac salade salamandre salon sandale sandwich sapin sardine satellite saucisse saumon sauterelle savane savon scaphandre scie scorpion sculpture seau sel selle sémaphore semelle sentier serpent serrure serviette sifflet signal singe sirène sirop ski smoking soldat soleil sommet sonnette sorbet sorcière soucoupe soupe source souris sous-marin spatule sphinx sprint squelette stade stalactite statue store stylo sucre sultan tableau tablier tabouret tambour tambourin tampon tanière tapir tapis tasse taupe taureau taverne taxi téléphérique télescope tempête tenaille tennis tente terre tétine thé théâtre thermomètre tiare tigre tilleul timbre tipi tirelire tiroir toboggan toile toit tomate tonneau toque torche torchon tornade tortue totem toucan toupie tour tournevis tracteur train traîneau trampoline tramway trapèze trèfle trésor tribunal tricot trident trombone trompette tronc trophée trottinette trousse truffe truite tuba tulipe tunnel turban tuyau univers usine vache vague valise vampire vanille vase vautour vélo velours vent ventilateur ver verger vernis verre veste viaduc vigne village vinaigre violette violon vipère vis vitrail voile voiture volant volcan voleur vortex wagon yacht yaourt yéti zèbre zéro".split(" ");
+
+  /* ---------- Constantes ---------- */
+  const PH = {
+    LOBBY: "LOBBY", TEAM_ASSIGNMENT: "TEAM_ASSIGNMENT", ROLE_REVEAL: "ROLE_REVEAL", READY: "READY",
+    CLUE_ENTRY: "CLUE_ENTRY", GUESSING: "GUESSING", TURN_END: "TURN_END", GAME_OVER: "GAME_OVER"
+  };
+  /* transitions autorisées de la machine à états */
+  const NEXT = {
+    LOBBY: ["TEAM_ASSIGNMENT"],
+    TEAM_ASSIGNMENT: ["ROLE_REVEAL", "LOBBY"],
+    ROLE_REVEAL: ["READY", "LOBBY", "TEAM_ASSIGNMENT"],
+    READY: ["CLUE_ENTRY", "LOBBY", "TEAM_ASSIGNMENT"],
+    CLUE_ENTRY: ["GUESSING", "TURN_END", "LOBBY", "TEAM_ASSIGNMENT"],
+    GUESSING: ["TURN_END", "GAME_OVER", "LOBBY", "TEAM_ASSIGNMENT"],
+    TURN_END: ["CLUE_ENTRY", "LOBBY", "TEAM_ASSIGNMENT"],
+    GAME_OVER: ["TEAM_ASSIGNMENT", "LOBBY"]
+  };
+  const IN_GAME = ["ROLE_REVEAL", "READY", "CLUE_ENTRY", "GUESSING", "TURN_END", "GAME_OVER"];
+  const TEAM = {
+    R: { name: "Rouges", one: "Rouge", ic: "▲" },
+    B: { name: "Bleus", one: "Bleue", ic: "●" }
+  };
+  const KEY_LABEL = { R: "Rouge", B: "Bleu", N: "Neutre", X: "Interdit" };
+  const LIMITS = {
+    minPlayers: 4, maxPlayers: 10, nameMax: 16, clueMin: 2, clueMax: 24,
+    readyMs: 4200, turnEndMs: 4400, actBurst: 12, actWindowMs: 3000,
+    lobbyIdleMs: 2 * 3600 * 1000, saveMaxAgeMs: 12 * 3600 * 1000, claimAfterMs: 12000
+  };
+  const TOKEN_RE = /^[A-Za-z0-9]{16,40}$/;
+  const other = t => (t === "R" ? "B" : "R");
+
+  /* ---------- Outils texte ---------- */
+  function norm(w) {
+    return String(w).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/œ/gi, "oe").replace(/æ/gi, "ae")
+      .toLowerCase().replace(/[^a-z]/g, "");
+  }
+  /* Pseudo : 1 à 16 caractères visibles ; pas de caractères de contrôle ni de balises */
+  function cleanName(s) {
+    if (typeof s !== "string") return { ok: false, err: "Pseudo manquant." };
+    let n = s.replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩<>]/g, "").replace(/\s+/g, " ").trim();
+    if (!n) return { ok: false, err: "Choisis un pseudo." };
+    if ([...n].length > LIMITS.nameMax) return { ok: false, err: "Pseudo trop long (16 caractères maximum)." };
+    if (!/[\p{L}\p{N}]/u.test(n)) return { ok: false, err: "Le pseudo doit contenir au moins une lettre ou un chiffre." };
+    return { ok: true, name: n };
+  }
+  function nameKey(n) { return String(n).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, ""); }
+
+  /* Indice : un seul mot (lettres, éventuellement trait d'union ou apostrophe) */
+  function cleanClue(s) {
+    if (typeof s !== "string") return { ok: false, err: "Indice manquant." };
+    const w = s.normalize("NFC").trim();
+    if (!w) return { ok: false, err: "L'indice est vide." };
+    if (/\s/.test(w)) return { ok: false, err: "Un seul mot, sans espace." };
+    if (/[0-9]/.test(w)) return { ok: false, err: "L'indice ne doit pas contenir de chiffre." };
+    if (!/^[\p{L}][\p{L}'’-]*$/u.test(w)) return { ok: false, err: "Uniquement des lettres (trait d'union accepté)." };
+    const len = [...w].length;
+    if (len < LIMITS.clueMin) return { ok: false, err: "Indice trop court." };
+    if (len > LIMITS.clueMax) return { ok: false, err: "Indice trop long (24 lettres maximum)." };
+    return { ok: true, word: w.toUpperCase() };
+  }
+  /* Nombre : entier, 1 ≤ n ≤ mots restants de l'équipe */
+  function cleanNumber(n, max) {
+    if (typeof n === "string" && /^\s*\d+\s*$/.test(n)) n = Number(n);
+    if (typeof n !== "number" || !Number.isFinite(n)) return { ok: false, err: "Le nombre est invalide." };
+    if (!Number.isInteger(n)) return { ok: false, err: "Le nombre doit être entier." };
+    if (n < 1) return { ok: false, err: "Le nombre doit valoir au moins 1." };
+    if (n > max) return { ok: false, err: "Le nombre ne peut pas dépasser " + max + " (mots restants de ton équipe)." };
+    return { ok: true, n };
+  }
+  /* L'indice ne doit pas être un mot encore caché de la grille, ni en contenir un, ni y être contenu */
+  function clueConflict(word, grid) {
+    const c = norm(word);
+    if (!c) return "Indice invalide.";
+    for (const card of grid) {
+      if (card.r) continue;
+      const g = norm(card.w);
+      if (c === g) return "« " + card.w + " » est sur la grille : interdit comme indice.";
+      if (c.length >= 3 && g.length >= 3 && (c.includes(g) || g.includes(c)))
+        return "Indice trop proche du mot « " + card.w + " » de la grille.";
+    }
+    return null;
+  }
+
+  /* ---------- Hasard ---------- */
+  function shuffle(a, rand) {
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  }
+  function pickWords(rand, n) {
+    const pool = shuffle(WORDS.slice(), rand), out = [], keys = [];
+    for (const w of pool) {
+      const k = norm(w);
+      if (keys.some(x => x === k || (x.length >= 3 && k.length >= 3 && (x.startsWith(k) || k.startsWith(x))) ||
+        (x.length >= 5 && k.length >= 5 && x.slice(0, 5) === k.slice(0, 5)))) continue;
+      out.push(w); keys.push(k);
+      if (out.length === n) break;
+    }
+    return out;
+  }
+  /* Grille 5×5 : 9 mots pour l'équipe qui commence, 8 pour l'autre, 7 neutres, 1 interdit */
+  function makeGrid(rand, starter) {
+    const words = pickWords(rand, 25);
+    const keys = shuffle([].concat(Array(9).fill(starter), Array(8).fill(other(starter)), Array(7).fill("N"), ["X"]), rand);
+    const grid = words.map((w, i) => ({ w: w.toUpperCase(), k: keys[i], r: false, by: null }));
+    const errs = checkGrid(grid, starter);
+    if (errs.length) throw new Error("Grille invalide : " + errs.join(", "));
+    return grid;
+  }
+  function checkGrid(grid, starter) {
+    const e = [];
+    if (!Array.isArray(grid) || grid.length !== 25) return ["la grille doit contenir 25 cartes"];
+    const c = { R: 0, B: 0, N: 0, X: 0 }, seen = new Set();
+    for (const card of grid) {
+      if (!card || typeof card.w !== "string" || !card.w) e.push("mot manquant");
+      else { const k = norm(card.w); if (seen.has(k)) e.push("mot en double : " + card.w); seen.add(k); }
+      if (!(card.k in c)) e.push("couleur inconnue"); else c[card.k]++;
+    }
+    if (c[starter] !== 9) e.push("l'équipe qui commence doit avoir 9 mots");
+    if (c[other(starter)] !== 8) e.push("l'autre équipe doit avoir 8 mots");
+    if (c.N !== 7) e.push("il faut 7 neutres");
+    if (c.X !== 1) e.push("il faut exactement 1 mot interdit");
+    if (c.R + c.B + c.N + c.X !== 25) e.push("total différent de 25");
+    return e;
+  }
+
+  function code4(rand) {
+    const L = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    let s = ""; for (let i = 0; i < 4; i++) s += L[Math.floor(rand() * L.length)];
+    return s;
+  }
+
+  /* ---------- Moteur ---------- */
+  function Engine(io) {
+    io = io || {};
+    const now = io.now || (() => Date.now());
+    const rand = io.rand || Math.random;
+    const changed = io.changed || (() => {});
+    let S = null;
+    let rate = {};                        // anti-rafale (non sauvegardé)
+    let seen = {};                        // jeton -> ms depuis la dernière requête du téléphone
+
+    function blank(keepPlayers) {
+      const prev = S;
+      S = {
+        v: 1, room: code4(rand), phase: PH.LOBBY, seq: 0, gseq: 0,
+        players: keepPlayers && prev ? prev.players.map(p => ({ tok: p.tok, id: p.id, name: p.name, team: null, master: false, ready: false, want: false })) : [],
+        nextId: keepPlayers && prev ? prev.nextId : 1,
+        starter: null, turn: null, grid: [], clue: null, guesses: 0, points: {},
+        history: [], winner: null, reason: null, round: 0, until: 0,
+        notes: {}, claims: [], ev: { n: prev ? prev.ev.n + 1 : 1, t: "lobby" },
+        wins: keepPlayers && prev ? prev.wins : { R: 0, B: 0 },
+        created: now(), lastAct: now(), log: []
+      };
+      if (keepPlayers && prev) S.room = prev.room;
+    }
+    blank(false);
+
+    /* --- utilitaires --- */
+    const P = tok => S.players.find(p => p.tok === tok);
+    const byId = id => S.players.find(p => p.id === id);
+    const team = t => S.players.filter(p => p.team === t);
+    const master = t => S.players.find(p => p.team === t && p.master);
+    const left = t => S.grid.filter(c => c.k === t && !c.r).length;
+    function go(ph) {
+      if (!NEXT[S.phase] || !NEXT[S.phase].includes(ph)) throw new Error("Transition interdite " + S.phase + " → " + ph);
+      S.phase = ph; S.seq++;
+    }
+    function ev(t, extra) { S.ev = Object.assign({}, extra || {}, { n: S.ev.n + 1, t }); }
+    function note(tok, aid, ok, msg) {
+      if (!tok) return;
+      const keys = Object.keys(S.notes);
+      if (keys.length > 40) keys.forEach(k => { if (!P(k)) delete S.notes[k]; });
+      S.notes[tok] = { aid: aid == null ? null : String(aid).slice(0, 24), ok, msg: msg || "" };
+    }
+    function log(s) { S.log.push(s); if (S.log.length > 80) S.log.shift(); }
+    function done() { S.seq++; changed(); }
+
+    /* --- vérifications communes --- */
+    function limited(tok) {
+      if (!rate[tok] && Object.keys(rate).length > 200) rate = {};
+      const t = now(), r = (rate[tok] = (rate[tok] || []).filter(x => t - x < LIMITS.actWindowMs));
+      r.push(t);
+      return r.length > LIMITS.actBurst;
+    }
+
+    /* =====================================================================
+       Actions des téléphones. a = {room, tok, aid, t, ...}
+       Renvoie {ok, err}. Toute erreur est aussi notée pour le téléphone.
+       ===================================================================== */
+    function act(a) {
+      if (!a || typeof a !== "object") return { ok: false, err: "Action illisible." };
+      const tok = a.tok;
+      if (typeof tok !== "string" || !TOKEN_RE.test(tok)) return { ok: false, err: "Jeton invalide." };
+      if (limited(tok)) return { ok: false, err: "Trop d'actions : ralentis un peu." };     // pas de notification : évite l'inondation
+      const fail = msg => { note(tok, a.aid, false, msg); done(); return { ok: false, err: msg }; };
+      if (a.room !== S.room) return fail("Ce salon n'existe plus. Scanne le nouveau QR code sur la télé.");
+      S.lastAct = now();
+      const p = P(tok);
+      const t = a.t;
+      if (t === "join") return join(a, p, fail);
+      if (t === "claim") return claim(a, p, fail);
+      if (!p) return fail("Tu ne fais pas partie de cette partie.");
+      const res = (H[t] || (() => fail("Action inconnue.")))(a, p, fail);
+      return res;
+    }
+
+    function join(a, p, fail) {
+      const c = cleanName(a.name);
+      if (!c.ok) return fail(c.err);
+      const k = nameKey(c.name);
+      if (S.players.some(q => q !== p && nameKey(q.name) === k)) return fail("Ce pseudo est déjà pris.");
+      if (p) {                                            // déjà inscrit : changement de pseudo
+        if (S.phase !== PH.LOBBY && S.phase !== PH.TEAM_ASSIGNMENT) return fail("Le pseudo ne peut plus changer une fois la partie lancée.");
+        p.name = c.name; note(p.tok, a.aid, true, "Pseudo enregistré."); ev("rename"); done(); return { ok: true };
+      }
+      if (S.phase !== PH.LOBBY) return fail("La partie a déjà commencé.");
+      if (S.players.length >= LIMITS.maxPlayers) return fail("Salon complet (10 joueurs maximum).");
+      S.players.push({ tok: a.tok, id: "p" + S.nextId++, name: c.name, team: null, master: false, ready: false, want: false });
+      note(a.tok, a.aid, true, "Bienvenue " + c.name + " !");
+      ev("join", { name: c.name }); log(c.name + " rejoint le salon.");
+      done(); return { ok: true };
+    }
+
+    /* Reprendre la place d'un joueur déconnecté (doit être accepté sur la télé) */
+    function claim(a, p, fail) {
+      if (p) return fail("Tu es déjà dans la partie.");
+      if (S.phase === PH.LOBBY) return fail("Le salon est ouvert : rejoins simplement avec ton pseudo.");
+      const seat = byId(a.seat);
+      if (!seat) return fail("Place inconnue.");
+      if (!offline(seat)) return fail(seat.name + " est encore connecté·e.");
+      S.claims = S.claims.filter(c => c.tok !== a.tok && c.seat !== seat.id);
+      S.claims.push({ tok: a.tok, seat: seat.id, at: now() });
+      if (S.claims.length > 5) S.claims.shift();
+      note(a.tok, a.aid, true, "Demande envoyée : validez sur la télé.");
+      ev("claim", { name: seat.name }); done(); return { ok: true };
+    }
+
+    const H = {
+      rename(a, p, fail) { return join(a, p, fail); },
+
+      leave(a, p, fail) {
+        if (S.phase !== PH.LOBBY && S.phase !== PH.TEAM_ASSIGNMENT) return fail("Impossible de quitter pendant la partie : demande à l'hôte.");
+        removePlayer(p); note(p.tok, a.aid, true, "Tu as quitté le salon."); ev("leave", { name: p.name }); done(); return { ok: true };
+      },
+
+      switchTeam(a, p, fail) {
+        if (S.phase !== PH.TEAM_ASSIGNMENT) return fail("Les équipes ne sont pas modifiables maintenant.");
+        moveTo(p, other(p.team));
+        note(p.tok, a.aid, true, "Tu rejoins les " + TEAM[p.team].name + ".");
+        ev("teams"); done(); return { ok: true };
+      },
+
+      wantMaster(a, p, fail) {
+        if (S.phase !== PH.TEAM_ASSIGNMENT) return fail("Les rôles ne sont pas modifiables maintenant.");
+        makeMaster(p); S.players.forEach(q => { if (q.team === p.team) q.want = q === p; });
+        note(p.tok, a.aid, true, "Tu es Maître des mots des " + TEAM[p.team].name + ".");
+        ev("teams"); done(); return { ok: true };
+      },
+
+      ready(a, p, fail) {
+        if (S.phase !== PH.ROLE_REVEAL) return fail("Pas besoin pour l'instant.");
+        if (p.ready) return fail("Déjà prêt·e.");
+        p.ready = true; note(p.tok, a.aid, true, "");
+        ev("ready");
+        if (S.players.every(q => q.ready)) toReady();
+        done(); return { ok: true };
+      },
+
+      clue(a, p, fail) {
+        if (S.phase !== PH.CLUE_ENTRY) return fail("Ce n'est pas le moment de donner un indice.");
+        if (p.team !== S.turn) return fail("Ce n'est pas le tour de ton équipe.");
+        if (!p.master) return fail("Seul le Maître des mots peut donner l'indice.");
+        if (a.gseq !== S.gseq) return fail("Le jeu a changé entre-temps : vérifie et renvoie.");
+        const c = cleanClue(a.word);
+        if (!c.ok) return fail(c.err);
+        const conflict = clueConflict(c.word, S.grid);
+        if (conflict) return fail(conflict);
+        const n = cleanNumber(a.n, left(p.team));
+        if (!n.ok) return fail(n.err);
+        S.clue = { w: c.word, n: n.n, t: p.team, max: n.n + 1, by: p.id };
+        S.guesses = 0; S.points = {};
+        S.history.push({ t: p.team, w: c.word, n: n.n, g: [], end: null });
+        go(PH.GUESSING); S.gseq++;
+        note(p.tok, a.aid, true, "Indice envoyé.");
+        ev("clue", { team: p.team, w: c.word, n: n.n }); log(TEAM[p.team].name + " : « " + c.word + " » en " + n.n + ".");
+        done(); return { ok: true };
+      },
+
+      point(a, p, fail) {
+        const e = guesserCheck(a, p, false); if (e) return fail(e);
+        const i = a.i, list = S.points[i] || [];
+        // un seul pointage par joueur
+        Object.keys(S.points).forEach(k => { S.points[k] = S.points[k].filter(x => x !== p.id); if (!S.points[k].length) delete S.points[k]; });
+        if (!list.includes(p.id)) S.points[i] = (S.points[i] || []).concat(p.id);
+        note(p.tok, a.aid, true, ""); ev("point"); done(); return { ok: true };
+      },
+
+      guess(a, p, fail) {
+        const e = guesserCheck(a, p, true); if (e) return fail(e);
+        reveal(a.i, p);
+        note(p.tok, a.aid, true, "");
+        done(); return { ok: true };
+      },
+
+      stop(a, p, fail) {
+        if (S.phase !== PH.GUESSING) return fail("Ce n'est pas le moment.");
+        if (p.team !== S.turn) return fail("Ce n'est pas le tour de ton équipe.");
+        if (p.master) return fail("Le Maître des mots ne choisit pas les cartes.");
+        if (a.gseq !== S.gseq) return fail("Le plateau a changé : vérifie avant de recommencer.");
+        if (S.guesses < 1) return fail("Révélez au moins une carte avant de passer.");
+        endTurn("stop", p.name + " arrête le tour.");
+        note(p.tok, a.aid, true, "");
+        done(); return { ok: true };
+      }
+    };
+
+    function guesserCheck(a, p, strict) {
+      if (S.phase !== PH.GUESSING) return "Ce n'est pas le moment de choisir une carte.";
+      if (p.team !== S.turn) return "Ce n'est pas le tour de ton équipe.";
+      if (p.master) return "Le Maître des mots ne peut pas choisir de carte.";
+      if (!Number.isInteger(a.i) || a.i < 0 || a.i > 24) return "Carte inconnue.";
+      if (S.grid[a.i].r) return "« " + S.grid[a.i].w + " » est déjà révélé.";
+      if (strict && a.gseq !== S.gseq) return "Le plateau a changé : vérifie avant de recommencer.";
+      return null;
+    }
+
+    function reveal(i, p) {
+      const card = S.grid[i], t = S.turn;
+      card.r = true; card.by = t; S.guesses++; S.gseq++; S.points = {};
+      const h = S.history[S.history.length - 1];
+      h.g.push({ w: card.w, k: card.k, by: p ? p.id : null });
+      ev("reveal", { i, k: card.k, team: t, w: card.w, name: p ? p.name : "" });
+      log((p ? p.name : TEAM[t].name) + " révèle « " + card.w + " » : " + KEY_LABEL[card.k] + ".");
+      if (card.k === "X") return gameOver(other(t), "forbidden", t);
+      if (left("R") === 0) return gameOver("R", "all", card.k === "R" && t !== "R" ? t : null);
+      if (left("B") === 0) return gameOver("B", "all", card.k === "B" && t !== "B" ? t : null);
+      if (card.k === t) {
+        if (S.guesses >= S.clue.max) return endTurn("max", "Nombre d'essais atteint.");
+        return;                                            // l'équipe continue
+      }
+      endTurn(card.k === "N" ? "neutral" : "enemy", card.k === "N" ? "Mot neutre : fin du tour." : "Mot adverse : fin du tour.");
+    }
+
+    function endTurn(why, msg) {
+      const h = S.history[S.history.length - 1];
+      if (h && S.phase === PH.GUESSING) h.end = why;
+      if (S.phase === PH.CLUE_ENTRY) S.history.push({ t: S.turn, w: null, n: 0, g: [], end: why });
+      go(PH.TURN_END); S.gseq++;
+      S.until = now() + LIMITS.turnEndMs; S.points = {};
+      S.next = other(S.turn);
+      ev("turnEnd", { why, team: S.turn, msg });
+    }
+
+    function gameOver(winner, reason, culprit) {
+      const h = S.history[S.history.length - 1];
+      if (h) h.end = reason === "forbidden" ? "forbidden" : "win";
+      go(PH.GAME_OVER); S.gseq++;
+      S.winner = winner; S.reason = reason; S.culprit = culprit || null;
+      S.wins[winner] = (S.wins[winner] || 0) + 1;
+      S.points = {}; S.until = 0;
+      const prev = S.ev;
+      ev("gameOver", { winner, reason, k: prev.t === "reveal" ? prev.k : null, team: prev.team || null });
+      log(reason === "forbidden" ? "Mot interdit ! Victoire des " + TEAM[winner].name + "." : "Victoire des " + TEAM[winner].name + " !");
+    }
+
+    function toReady() {
+      go(PH.READY);
+      S.until = now() + LIMITS.readyMs;
+      ev("ready-go", { starter: S.starter });
+    }
+
+    function removePlayer(p) {
+      const t = p.team, wasMaster = p.master;
+      S.players = S.players.filter(q => q !== p);
+      S.claims = S.claims.filter(c => c.seat !== p.id);
+      if (wasMaster && t) { const n = team(t)[0]; if (n) n.master = true; }
+    }
+    function moveTo(p, t) {
+      if (p.team === t) return;
+      const from = p.team;
+      p.team = t;
+      if (p.master) { p.master = false; const n = team(from)[0]; if (n) n.master = true; }
+      if (!master(t)) p.master = true;
+    }
+    function makeMaster(p) {
+      team(p.team).forEach(q => { q.master = false; });
+      p.master = true;
+    }
+
+    function offline(p) {
+      const ms = seen[p.tok];
+      return ms === undefined || ms > LIMITS.claimAfterMs;
+    }
+
+    /* =====================================================================
+       Commandes de l'hôte (télécommande de la télé) — appel direct, pas de réseau
+       ===================================================================== */
+    function teamCheck() {
+      const r = team("R"), b = team("B"), e = [];
+      if (S.players.some(p => !p.team)) e.push("Tout le monde doit avoir une équipe.");
+      if (r.length < 2 || b.length < 2) e.push("Il faut au moins 2 joueurs par équipe.");
+      if (Math.abs(r.length - b.length) > 1) e.push("Équipes déséquilibrées (écart maximum : 1 joueur).");
+      if (r.filter(p => p.master).length !== 1) e.push("Les Rouges doivent avoir un seul Maître des mots.");
+      if (b.filter(p => p.master).length !== 1) e.push("Les Bleus doivent avoir un seul Maître des mots.");
+      return e;
+    }
+    function lobbyCheck() {
+      const e = [];
+      if (S.players.length < LIMITS.minPlayers) e.push("Il faut au moins 4 joueurs (" + S.players.length + " pour l'instant).");
+      if (S.players.length > LIMITS.maxPlayers) e.push("10 joueurs maximum.");
+      return e;
+    }
+    function shuffleTeams() {
+      const ps = shuffle(S.players.slice(), rand);
+      ps.forEach((p, i) => { p.team = i % 2 === 0 ? "R" : "B"; p.master = false; });
+      // si une seule personne s'est portée volontaire par équipe, elle devient Maître
+      ["R", "B"].forEach(t => { const w = team(t).filter(p => p.want); (w.length ? w[0] : team(t)[0]).master = true; });
+    }
+    const host = {
+      create() { blank(false); ev("created"); done(); return { ok: true }; },
+      start() {
+        if (S.phase !== PH.LOBBY) return { ok: false, err: "Déjà lancé." };
+        const e = lobbyCheck(); if (e.length) return { ok: false, err: e[0] };
+        go(PH.TEAM_ASSIGNMENT); shuffleTeams(); ev("teams"); done(); return { ok: true };
+      },
+      shuffle() {
+        if (S.phase !== PH.TEAM_ASSIGNMENT) return { ok: false, err: "Pas maintenant." };
+        shuffleTeams(); ev("teams"); done(); return { ok: true };
+      },
+      move(id) {
+        const p = byId(id); if (!p) return { ok: false, err: "Joueur inconnu." };
+        if (S.phase !== PH.TEAM_ASSIGNMENT) return { ok: false, err: "Pas maintenant." };
+        moveTo(p, other(p.team)); ev("teams"); done(); return { ok: true };
+      },
+      setMaster(id) {
+        const p = byId(id); if (!p || !p.team) return { ok: false, err: "Joueur inconnu." };
+        if (S.phase === PH.LOBBY || S.phase === PH.GAME_OVER) return { ok: false, err: "Pas maintenant." };
+        if (S.phase === PH.GUESSING && p.team === S.turn) return { ok: false, err: "Attendez la fin du tour de cette équipe." };
+        makeMaster(p); ev("teams", { name: p.name }); done(); return { ok: true };
+      },
+      kick(id) {
+        const p = byId(id); if (!p) return { ok: false, err: "Joueur inconnu." };
+        if (S.phase !== PH.LOBBY && S.phase !== PH.TEAM_ASSIGNMENT) return { ok: false, err: "Impossible pendant la partie." };
+        removePlayer(p); delete S.notes[p.tok]; ev("leave", { name: p.name }); done(); return { ok: true };
+      },
+      confirmTeams() {
+        if (S.phase !== PH.TEAM_ASSIGNMENT) return { ok: false, err: "Pas maintenant." };
+        const e = lobbyCheck().concat(teamCheck()); if (e.length) return { ok: false, err: e[0] };
+        S.starter = rand() < 0.5 ? "R" : "B";
+        S.turn = S.starter;
+        S.grid = makeGrid(rand, S.starter);
+        S.clue = null; S.guesses = 0; S.history = []; S.points = {}; S.winner = null; S.reason = null; S.culprit = null;
+        S.round++;
+        S.players.forEach(p => { p.ready = false; });
+        go(PH.ROLE_REVEAL); S.gseq++;
+        ev("roles"); done(); return { ok: true };
+      },
+      backToTeams() {
+        if (S.phase !== PH.ROLE_REVEAL && S.phase !== PH.READY) return { ok: false, err: "Pas maintenant." };
+        go(PH.TEAM_ASSIGNMENT); S.grid = []; S.round = Math.max(0, S.round - 1); S.until = 0;
+        S.players.forEach(p => { p.ready = false; }); ev("teams"); done(); return { ok: true };
+      },
+      forceReady() {
+        if (S.phase !== PH.ROLE_REVEAL) return { ok: false, err: "Pas maintenant." };
+        toReady(); done(); return { ok: true };
+      },
+      skipTurn() {
+        if (S.phase !== PH.CLUE_ENTRY && S.phase !== PH.GUESSING) return { ok: false, err: "Pas maintenant." };
+        endTurn("skip", "Tour passé par l'hôte."); done(); return { ok: true };
+      },
+      replay() {                                            // même équipes, nouvelle grille, maîtres qui tournent
+        if (S.phase !== PH.GAME_OVER) return { ok: false, err: "Pas maintenant." };
+        ["R", "B"].forEach(t => {
+          const ps = team(t), i = ps.findIndex(p => p.master);
+          ps.forEach(p => { p.master = false; });
+          if (ps.length) ps[(i + 1) % ps.length].master = true;
+        });
+        go(PH.TEAM_ASSIGNMENT); S.grid = []; S.clue = null; S.history = []; S.winner = null;
+        ev("teams"); done(); return { ok: true };
+      },
+      newGame() {                                           // retour au salon, joueurs conservés
+        const ok = S.phase === PH.GAME_OVER || S.phase === PH.TEAM_ASSIGNMENT || IN_GAME.includes(S.phase);
+        if (!ok) return { ok: false, err: "Pas maintenant." };
+        blank(true); ev("lobby"); done(); return { ok: true };
+      },
+      approveClaim(seat) {
+        const c = S.claims.find(x => x.seat === seat); if (!c) return { ok: false, err: "Demande introuvable." };
+        const p = byId(seat); S.claims = S.claims.filter(x => x !== c);
+        if (!p) { done(); return { ok: false, err: "Place introuvable." }; }
+        delete S.notes[p.tok];
+        p.tok = c.tok;                                     // l'ancien jeton ne donne plus accès à rien
+        note(p.tok, null, true, "Tu as repris la place de " + p.name + ".");
+        ev("claimOk", { name: p.name }); done(); return { ok: true };
+      },
+      denyClaim(seat) {
+        const c = S.claims.find(x => x.seat === seat); if (!c) return { ok: false, err: "Demande introuvable." };
+        S.claims = S.claims.filter(x => x !== c);
+        note(c.tok, null, false, "Demande refusée par l'hôte.");
+        done(); return { ok: true };
+      }
+    };
+
+    /* Transitions temporisées + expiration ; appelé régulièrement par la télé */
+    function tick() {
+      const t = now();
+      if (S.phase === PH.READY && t >= S.until) { go(PH.CLUE_ENTRY); S.until = 0; ev("turn", { team: S.turn }); done(); return true; }
+      if (S.phase === PH.TURN_END && t >= S.until) {
+        S.turn = S.next || other(S.turn); S.next = null; S.clue = null; S.guesses = 0;
+        go(PH.CLUE_ENTRY); S.until = 0; ev("turn", { team: S.turn }); done(); return true;
+      }
+      if (S.claims.length && S.claims.some(c => t - c.at > 120000)) { S.claims = S.claims.filter(c => t - c.at <= 120000); done(); return true; }
+      if (S.phase === PH.LOBBY && S.players.length && t - S.lastAct > LIMITS.lobbyIdleMs) { blank(false); ev("expired"); done(); return true; }
+      return false;
+    }
+
+    function setSeen(map) {
+      seen = map && typeof map === "object" ? map : {};
+    }
+
+    /* =====================================================================
+       Vues : la vue publique ne contient JAMAIS la clé secrète des cartes cachées
+       (sauf fin de partie). Les vues privées sont indexées par jeton.
+       ===================================================================== */
+    function pubView() {
+      const over = S.phase === PH.GAME_OVER;
+      const pts = {};
+      Object.keys(S.points).forEach(k => { pts[k] = S.points[k].slice(); });
+      return {
+        room: S.room, phase: S.phase, seq: S.seq, gseq: S.gseq, round: S.round,
+        players: S.players.map(p => ({ id: p.id, n: p.name, t: p.team, m: !!p.master, ok: !!p.ready, on: !offline(p) })),
+        starter: S.starter, turn: S.turn,
+        grid: S.grid.map((c, i) => ({ w: c.w, r: c.r, k: c.r || over ? c.k : null, by: c.r ? c.by : null, p: pts[i] || null })),
+        left: S.grid.length ? { R: left("R"), B: left("B") } : null,
+        total: S.grid.length ? { R: S.grid.filter(c => c.k === "R").length, B: S.grid.filter(c => c.k === "B").length } : null,
+        clue: S.clue ? { w: S.clue.w, n: S.clue.n, t: S.clue.t, max: S.clue.max, used: S.guesses } : null,
+        history: S.history.map(h => ({ t: h.t, w: h.w, n: h.n, end: h.end, g: h.g.map(g => ({ w: g.w, k: g.k })) })),
+        winner: S.winner, reason: S.reason, culprit: S.culprit || null, wins: S.wins,
+        until: S.until ? Math.max(0, S.until - now()) : 0,
+        claims: S.claims.map(c => { const p = byId(c.seat); return { seat: c.seat, n: p ? p.name : "?" }; }),
+        lobby: S.phase === PH.LOBBY ? lobbyCheck() : null,
+        teamErr: S.phase === PH.TEAM_ASSIGNMENT ? teamCheck() : null,
+        ev: S.ev, words: WORDS.length
+      };
+    }
+    function privView(p) {
+      const v = { id: p.id, room: S.room, note: S.notes[p.tok] || null };
+      if (p.master && IN_GAME.includes(S.phase) && S.grid.length) v.key = S.grid.map(c => c.k);
+      return v;
+    }
+    function view() {
+      const pub = pubView(), priv = {};
+      S.players.forEach(p => { priv[p.tok] = privView(p); });
+      // téléphones extérieurs (demande de reprise, erreurs avant inscription)
+      Object.keys(S.notes).forEach(tok => { if (!priv[tok]) priv[tok] = { id: null, room: S.room, note: S.notes[tok], claim: S.claims.some(c => c.tok === tok) }; });
+      return { pub, priv };
+    }
+
+    /* --- sauvegarde / reprise (rechargement de la page télé) --- */
+    function serialize() { return JSON.stringify(S); }
+    function restore(json) {
+      try {
+        const o = typeof json === "string" ? JSON.parse(json) : json;
+        if (!o || o.v !== 1 || !Array.isArray(o.players) || !PH[o.phase]) return false;
+        if (now() - (o.lastAct || 0) > LIMITS.saveMaxAgeMs) return false;      // partie abandonnée : expirée
+        if (o.grid && o.grid.length && checkGrid(o.grid, o.starter).length) return false;
+        S = o; S.seq++;
+        if (S.until) S.until = Math.max(S.until, now() + 1500);               // laisse le temps à l'écran de se recaler
+        ev("restored"); changed(); return true;
+      } catch (e) { return false; }
+    }
+
+    return {
+      act, tick, view, setSeen, serialize, restore, host,
+      state: () => S,
+      check: () => ({ lobby: lobbyCheck(), teams: teamCheck() })
+    };
+  }
+
+  return { Engine, WORDS, PH, NEXT, TEAM, KEY_LABEL, LIMITS, TOKEN_RE, norm, cleanName, cleanClue, cleanNumber, clueConflict, makeGrid, checkGrid, pickWords, shuffle };
+});
