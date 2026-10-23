@@ -355,7 +355,7 @@ let screen="home";
 if(saved&&saved.phase&&saved.phase!=="lobby"&&saved.phase!=="end"){E.restore(saved);screen="game"}
 async function boot(){
   try{const r=await fetch("/lg/acts?since=999999999",{cache:"no-store"});seq=(await r.json()).seq}catch(e){}
-  loop();setInterval(()=>{E.tick();botsAct();if(screen==="game"||screen==="lobby")dirty=true;if(dirty)flush()},1000);
+  loop();setInterval(()=>{E.tick();botsAct();if(dirty)flush();else if(screen==="game")updateLive(E.view().pub)},1000);
 }
 async function loop(){
   try{const r=await fetch("/lg/acts?since="+seq,{cache:"no-store"});const d=await r.json();
@@ -649,12 +649,23 @@ function sheetHTML(me){
     ${me.powersLost?`<div class="note red">L'Ancien a été tué par le village : vous avez perdu votre pouvoir.</div>`:""}</div>
     ${me.notes.length?`<div class="card"><h3>Votre carnet secret</h3><div class="notes">${me.notes.map(n=>`<div class="note ${n.red?"red":""}">${esc(n.t)}</div>`).join("")}</div></div>`:""}</div></div>`;
 }
+let lastPhoneHtml="",waitTyping=false;
+function typing(){const a=document.activeElement;return a&&a.tagName==="INPUT"&&a.type==="text"&&root.contains(a)}
+document.addEventListener("focusout",()=>{if(waitTyping)setTimeout(()=>{if(!typing()&&waitTyping){waitTyping=false;render()}},400)});
+function paint(html){
+  if(html===lastPhoneHtml)return false;
+  if(typing()){waitTyping=true;return false}
+  const vals={};root.querySelectorAll("input[type=text]").forEach(i=>{if(i.id)vals[i.id]=i.value});
+  lastPhoneHtml=html;root.innerHTML=html;
+  Object.keys(vals).forEach(id=>{const i=document.getElementById(id);if(i&&vals[id]!==undefined)i.value=vals[id]});
+  return true;
+}
 function render(){
   const pub=V&&V.pub,me=V&&V.priv;
   let h=`<div class="pw"><div class="ptop"><h1>Loup-Garou Ultimate</h1><div class="st">${me?esc(me.name)+"<br>":""}${pub&&pub.room?"Salon "+esc(pub.room):""}</div></div>`;
   if(!online)h+=`<div class="netbar">Connexion perdue avec la télé… reconnexion automatique.</div>`;
   if(pub&&pub.paused)h+=`<div class="banner">Partie en pause sur la télé.</div>`;
-  if(!pub||(!pub.open&&pub.phase==="lobby")){root.innerHTML=h+`<div class="card"><h3>En attente de la télé</h3><p class="muted" style="margin:0">Sur la télé, ouvrez Loup-Garou Ultimate et choisissez « Créer une partie ».</p></div></div>`;return}
+  if(!pub||(!pub.open&&pub.phase==="lobby")){paint(h+`<div class="card"><h3>En attente de la télé</h3><p class="muted" style="margin:0">Sur la télé, ouvrez Loup-Garou Ultimate et choisissez « Créer une partie ».</p></div></div>`);return}
   if(!me){
     if(pub.phase==="lobby"){
       h+=`<form class="card" id="join"><h3>Rejoindre le village</h3><label class="muted" for="code">Code du salon (affiché sur la télé)</label>
@@ -662,7 +673,7 @@ function render(){
         <label class="muted" for="nm">Votre prénom</label><input type="text" id="nm" maxlength="16" value="${esc(store.get("lg.name",""))}" autocomplete="off" placeholder="Prénom">
         <button class="btn gold" type="submit">Rejoindre</button><div id="joinerr" class="muted"></div></form>`;
     }else h+=`<div class="card"><h3>Partie en cours</h3><p class="muted" style="margin:0">Une partie est déjà lancée. Vous pourrez rejoindre la suivante.</p></div>`;
-    root.innerHTML=h+"</div>";
+    if(!paint(h+"</div>"))return;
     const f=$("#join");if(f)f.onsubmit=e=>{e.preventDefault();const c=$("#code").value.toUpperCase().replace(/[^A-Z]/g,"");const n=$("#nm").value.trim();
       if(c!==pub.room){$("#joinerr").textContent="Ce code ne correspond pas au salon affiché sur la télé.";return}
       if(!n){$("#joinerr").textContent="Indiquez votre prénom.";return}
@@ -720,7 +731,7 @@ function render(){
     case "end":h+=`<div class="card"><h3>${p.won?"Vous avez gagné ! 🏆":"Vous avez perdu"}</h3><p style="margin:0">${esc(pub.narr)}</p>
       <div class="notes">${pub.players.map(x=>`<div class="note ${x.w?"red":""}">${esc(x.n)}${x.l?" 💘":""} : <b>${esc((x.ic||"")+" "+(x.r||""))}</b>${x.win?" 🏆":""}</div>`).join("")}</div></div>`;break;
   }
-  root.innerHTML=h+"</div>"+(sheet&&me.role?sheetHTML(me):"");
+  if(!paint(h+"</div>"+(sheet&&me.role?sheetHTML(me):"")))return;
   bindPhone(p,me);
 }
 function bindPhone(p,me){
