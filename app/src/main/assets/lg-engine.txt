@@ -1,0 +1,815 @@
+/* =====================================================================
+   LOUP-GAROU ULTIMATE — moteur de règles
+   ---------------------------------------------------------------------
+   Tourne sur la télévision (application Android TV), qui héberge aussi
+   le serveur local. Les téléphones n'envoient que des intentions
+   ("je vote pour X") : le moteur vérifie la phase, le rôle et la
+   validité de chaque action avant de l'appliquer.
+
+   Ordre de la nuit (étapes absentes = sautées ; rôle présent mais mort
+   ou sans pouvoir = pause factice pour ne rien trahir) :
+     Nuit 1 seulement : Voleur, Cupidon, Amoureux, Enfant sauvage, Chien-loup
+     Chaque nuit      : Voyante, Renard, Salvateur, Loups-garous (+ Petite fille),
+                        Infect Père des Loups, Grand Méchant Loup,
+                        Loup Blanc (nuits paires), Sorcière, Joueur de flûte, Corbeau
+
+   Résolution à l'aube (toujours dans cet ordre) :
+     1. Tétanos du Chevalier (loup contaminé la nuit précédente)
+     2. Victime des loups : protégée par le Salvateur ? sauvée par la Sorcière ?
+        infectée par l'Infect ? sinon attaque (l'Ancien encaisse la 1re)
+     3. Victime du Grand Méchant Loup (protection du Salvateur valable)
+     4. Victime du Loup Blanc (protection du Salvateur valable)
+     5. Potion de mort de la Sorcière (ignore toute protection)
+     6. Réactions en chaîne : chagrin des amoureux, modèle de l'Enfant
+        sauvage, Ancien tué par le village, Chasseur
+     7. Charmes du Joueur de flûte, grognement de l'ours
+   ===================================================================== */
+(function(root){
+"use strict";
+
+const CAMP={village:"Village",loups:"Loups-garous",solo:"Solitaire"};
+/* Fiches des rôles. impl:false = présenté dans la collection mais pas encore jouable. */
+const ROLES={
+  villageois:{n:"Villageois",camp:"village",cat:"village",ic:"🏠",multi:true,
+    d:"Un habitant sans pouvoir. Sa seule arme : son vote et son sens de l'observation.",
+    pouvoir:"Aucun pouvoir spécial.",moment:"Le jour, pendant le débat et le vote.",limites:"Aucune.",victoire:"Éliminer tous les loups-garous."},
+  voyante:{n:"Voyante",camp:"village",cat:"village",ic:"🔮",
+    d:"Chaque nuit, elle découvre le vrai rôle d'un joueur.",
+    pouvoir:"Désigne un joueur et voit son rôle exact.",moment:"Chaque nuit, avant les loups.",
+    limites:"Un seul joueur par nuit. Perd son pouvoir si l'Ancien est tué par le village.",victoire:"Avec le village."},
+  petitefille:{n:"Petite Fille",camp:"village",cat:"village",ic:"👧",
+    d:"Elle peut entrouvrir les yeux pendant que les loups chassent.",
+    pouvoir:"Une fois par nuit, espionne la meute et aperçoit le nom d'un loup.",moment:"Pendant le réveil des loups.",
+    limites:"À chaque espionnage, 30 % de risque que les loups découvrent son nom.",victoire:"Avec le village."},
+  chasseur:{n:"Chasseur",camp:"village",cat:"village",ic:"🏹",
+    d:"S'il meurt, il emporte immédiatement quelqu'un avec lui.",
+    pouvoir:"À sa mort, désigne un joueur qui meurt aussitôt.",moment:"Au moment de sa mort, de jour comme de nuit.",
+    limites:"Perd son pouvoir si l'Ancien est tué par le village.",victoire:"Avec le village."},
+  sorciere:{n:"Sorcière",camp:"village",cat:"village",ic:"🧪",
+    d:"Elle possède une potion de vie et une potion de mort.",
+    pouvoir:"Voit la victime des loups ; peut la sauver (potion de vie) et/ou éliminer un joueur (potion de mort).",
+    moment:"Chaque nuit, après les loups.",limites:"Chaque potion ne sert qu'une fois dans la partie. Ne voit que la victime principale des loups.",victoire:"Avec le village."},
+  cupidon:{n:"Cupidon",camp:"village",cat:"village",ic:"💘",
+    d:"La première nuit, il unit deux joueurs pour la vie… et la mort.",
+    pouvoir:"Désigne deux amoureux (il peut se choisir). Si l'un meurt, l'autre meurt de chagrin.",
+    moment:"Première nuit uniquement.",limites:"Un amoureux loup et un amoureux villageois forment un camp à part.",
+    victoire:"Avec le village. Les amoureux d'un camp différent gagnent s'ils sont les deux derniers survivants."},
+  salvateur:{n:"Salvateur",camp:"village",cat:"village",ic:"🛡️",
+    d:"Chaque nuit, il protège un joueur contre les loups.",
+    pouvoir:"Le joueur protégé ne peut pas être tué par les loups cette nuit.",moment:"Chaque nuit, avant les loups.",
+    limites:"Jamais le même joueur deux nuits de suite. Il peut se protéger. Ne protège pas de la potion de mort.",victoire:"Avec le village."},
+  ancien:{n:"Ancien",camp:"village",cat:"village",ic:"🧓",
+    d:"Robuste, il survit à la première attaque des loups.",
+    pouvoir:"La première attaque des loups ne le tue pas.",moment:"Passif.",
+    limites:"S'il est tué par le village (vote, potion ou chasseur), tous les villageois perdent leurs pouvoirs.",victoire:"Avec le village."},
+  idiot:{n:"Idiot du Village",camp:"village",cat:"village",ic:"🤪",
+    d:"Si le village vote contre lui, on découvre qu'il n'est qu'un idiot et on l'épargne.",
+    pouvoir:"Éliminé par le vote : son rôle est révélé et il reste en vie.",moment:"Lors du vote.",
+    limites:"Une fois révélé, il ne peut plus voter. Les loups peuvent toujours le dévorer.",victoire:"Avec le village."},
+  bouc:{n:"Bouc Émissaire",camp:"village",cat:"village",ic:"🐐",
+    d:"En cas d'égalité au vote, c'est lui qui paie.",
+    pouvoir:"Lors d'une égalité au vote, il est éliminé à la place des ex æquo.",moment:"Lors du vote.",
+    limites:"Version simplifiée : son pouvoir de désigner les votants du lendemain n'est pas inclus.",victoire:"Avec le village."},
+  renard:{n:"Renard",camp:"village",cat:"village",ic:"🦊",
+    d:"Il flaire la présence des loups autour d'un joueur.",
+    pouvoir:"Désigne un joueur : il apprend si ce joueur ou l'un de ses deux voisins est un loup.",moment:"Chaque nuit, avant les loups.",
+    limites:"S'il ne flaire aucun loup, il perd définitivement son pouvoir. Les voisins suivent l'ordre autour de la table.",victoire:"Avec le village."},
+  corbeau:{n:"Corbeau",camp:"village",cat:"village",ic:"🐦‍⬛",
+    d:"Il accuse anonymement un joueur chaque nuit.",
+    pouvoir:"Le joueur désigné commence le vote suivant avec 2 voix contre lui.",moment:"Chaque nuit, en dernier.",
+    limites:"Il peut s'abstenir. Perd son pouvoir si l'Ancien est tué par le village.",victoire:"Avec le village."},
+  montreur:{n:"Montreur d'Ours",camp:"village",cat:"village",ic:"🐻",
+    d:"Son ours grogne quand un loup est assis à côté de lui.",
+    pouvoir:"Chaque matin, si l'un de ses voisins vivants est un loup, la télé annonce que l'ours grogne.",moment:"Chaque matin, automatiquement.",
+    limites:"Les voisins suivent l'ordre autour de la table.",victoire:"Avec le village."},
+  chevalier:{n:"Chevalier à l'Épée Rouillée",camp:"village",cat:"village",ic:"🗡️",
+    d:"Son épée rouillée donne le tétanos au loup qui le dévore.",
+    pouvoir:"S'il est tué par les loups, le premier loup assis à sa gauche meurt la nuit suivante.",moment:"Quand les loups le tuent.",
+    limites:"Ne fonctionne que contre une attaque des loups.",victoire:"Avec le village."},
+  soeur:{n:"Sœur",camp:"village",cat:"village",ic:"👭",group:2,
+    d:"Deux sœurs qui se connaissent et peuvent se faire confiance.",
+    pouvoir:"Les deux sœurs connaissent l'identité l'une de l'autre dès le début.",moment:"Début de partie.",
+    limites:"Toujours par deux.",victoire:"Avec le village."},
+  frere:{n:"Frère",camp:"village",cat:"village",ic:"👬",group:3,
+    d:"Trois frères qui se connaissent et peuvent se faire confiance.",
+    pouvoir:"Les trois frères connaissent l'identité les uns des autres dès le début.",moment:"Début de partie.",
+    limites:"Toujours par trois.",victoire:"Avec le village."},
+  servante:{n:"Servante Dévouée",camp:"village",cat:"village",ic:"🧹",impl:false,
+    d:"Elle peut prendre le rôle d'un joueur éliminé par le vote.",pouvoir:"Avant la révélation d'un joueur éliminé au vote, peut se dévoiler et prendre son rôle.",
+    moment:"Lors d'une élimination par vote.",limites:"Pas encore jouable dans cette version.",victoire:"Selon son nouveau rôle."},
+  loup:{n:"Loup-Garou",camp:"loups",cat:"loups",ic:"🐺",multi:true,
+    d:"La nuit, il dévore les villageois avec la meute. Le jour, il se cache parmi eux.",
+    pouvoir:"Chaque nuit, la meute choisit une victime.",moment:"Chaque nuit.",
+    limites:"Ne peut pas dévorer un autre loup. La meute doit se mettre d'accord.",victoire:"Quand il ne reste plus aucun villageois."},
+  gml:{n:"Grand Méchant Loup",camp:"loups",cat:"loups",ic:"🐺",
+    d:"Un loup affamé qui dévore une deuxième victime.",
+    pouvoir:"Tant qu'aucun loup n'est mort, il se réveille seul après la meute et dévore une deuxième victime.",
+    moment:"Chaque nuit, après la meute.",limites:"Perd ce pouvoir dès qu'un loup meurt.",victoire:"Avec les loups."},
+  infect:{n:"Infect Père des Loups",camp:"loups",cat:"loups",ic:"🦠",
+    d:"Une fois dans la partie, il transforme la victime des loups en loup.",
+    pouvoir:"Une fois par partie, au lieu de tuer la victime de la meute, il l'infecte : elle devient loup-garou en gardant son pouvoir.",
+    moment:"Après le choix de la meute.",limites:"Une seule fois. L'infection échoue si la victime est protégée ou sauvée.",victoire:"Avec les loups."},
+  loupblanc:{n:"Loup Blanc",camp:"loups",cat:"loups",ic:"🤍",solo:true,
+    d:"Il chasse avec la meute, mais veut être le dernier survivant.",
+    pouvoir:"Une nuit sur deux, il se réveille seul et peut tuer un autre loup.",moment:"Nuits paires, après la meute.",
+    limites:"Les autres loups le croient des leurs.",victoire:"Seul : être le dernier joueur en vie."},
+  enfantsauvage:{n:"Enfant Sauvage",camp:"village",cat:"loups",ic:"🌿",
+    d:"Il choisit un modèle. Si son modèle meurt, il devient loup-garou.",
+    pouvoir:"La première nuit, désigne un modèle.",moment:"Première nuit.",
+    limites:"Tant que son modèle est vivant, il est villageois.",victoire:"Avec le village, ou avec les loups s'il s'est transformé."},
+  chienloup:{n:"Chien-Loup",camp:"village",cat:"loups",ic:"🐕",
+    d:"Il choisit son camp la première nuit : chien fidèle ou loup.",
+    pouvoir:"La première nuit, choisit de rester villageois ou de rejoindre la meute.",moment:"Première nuit.",
+    limites:"Son choix est définitif.",victoire:"Avec le camp choisi."},
+  voleur:{n:"Voleur",camp:"village",cat:"special",ic:"🃏",
+    d:"Il peut échanger sa carte contre l'une des deux cartes mises de côté.",
+    pouvoir:"La première nuit, voit les deux cartes restantes et peut en prendre une.",moment:"Première nuit, en premier.",
+    limites:"Si les deux cartes sont des loups, il doit en prendre une. Ajouter un Voleur ajoute 2 cartes au paquet.",victoire:"Selon le rôle gardé."},
+  flute:{n:"Joueur de Flûte",camp:"solo",cat:"special",ic:"🪈",solo:true,
+    d:"Il envoûte les joueurs deux par deux.",
+    pouvoir:"Chaque nuit, charme deux joueurs. Les charmés apprennent qui est charmé.",moment:"Chaque nuit, après la sorcière.",
+    limites:"Il ne peut pas se charmer lui-même.",victoire:"Seul : tous les autres joueurs vivants sont charmés."},
+  ange:{n:"Ange",camp:"solo",cat:"special",ic:"😇",solo:true,
+    d:"Il veut mourir le plus vite possible.",
+    pouvoir:"Avec l'Ange, la partie commence par un débat et un vote.",moment:"Premier tour.",
+    limites:"S'il survit au premier vote et à la première nuit, il devient simple villageois.",victoire:"Seul : être éliminé au premier vote ou la première nuit."},
+  juge:{n:"Juge Bègue",camp:"village",cat:"special",ic:"⚖️",
+    d:"Une fois dans la partie, il peut déclencher un second vote.",
+    pouvoir:"Pendant un vote, peut demander secrètement un second vote immédiat.",moment:"Lors d'un vote.",
+    limites:"Une seule fois dans la partie.",victoire:"Avec le village."},
+  comedien:{n:"Comédien",camp:"village",cat:"special",ic:"🎭",impl:false,d:"Il joue tour à tour plusieurs rôles du village.",
+    pouvoir:"Dispose de trois rôles du village, chacun utilisable une fois.",moment:"Chaque nuit.",limites:"Pas encore jouable dans cette version.",victoire:"Avec le village."}
+};
+/* Rôles cités mais dont les règles varient trop selon les versions : listés sans être inventés. */
+const UNDOCUMENTED=["Confesseur","Institutrice","Assassin","Pyromane","Électron Libre","Garde du Corps","Alchimiste","Mentaliste","Vagabond"];
+
+const WOLF_ROLES=["loup","gml","infect","loupblanc"];
+const VILLAGE_POWER=["voyante","petitefille","chasseur","sorciere","salvateur","renard","corbeau","montreur","chevalier","juge"];
+const STEPS=["voleur","cupidon","amoureux","enfantsauvage","chienloup","voyante","renard","salvateur","loups","infect","gml","loupblanc","sorciere","flute","corbeau"];
+const STEP_LIMIT=90000;   // un rôle qui ne répond pas (téléphone éteint…) est passé au bout de 90 s
+const NIGHT1=["voleur","cupidon","amoureux","enfantsauvage","chienloup"];
+const WAKE={
+  voleur:"Le voleur se réveille et regarde les deux cartes mises de côté.",
+  cupidon:"Cupidon se réveille et désigne les deux amoureux.",
+  amoureux:"Les amoureux se réveillent et découvrent l'élu de leur cœur.",
+  enfantsauvage:"L'enfant sauvage se réveille et choisit son modèle.",
+  chienloup:"Le chien-loup se réveille et choisit son camp.",
+  voyante:"La voyante se réveille et sonde l'âme d'un joueur.",
+  renard:"Le renard se réveille et flaire le village.",
+  salvateur:"Le salvateur se réveille et choisit qui protéger cette nuit.",
+  loups:"Les loups-garous se réveillent et choisissent leur victime.",
+  infect:"L'infect père des loups décide s'il infecte la victime.",
+  gml:"Le grand méchant loup se réveille, encore affamé.",
+  loupblanc:"Le loup blanc se réveille seul.",
+  sorciere:"La sorcière se réveille et se penche sur ses potions.",
+  flute:"Le joueur de flûte se réveille et envoûte deux joueurs.",
+  corbeau:"Le corbeau se réveille et désigne un suspect."
+};
+const SLEEP={
+  voleur:"Le voleur se rendort.",cupidon:"Cupidon se rendort.",amoureux:"Les amoureux se rendorment.",
+  enfantsauvage:"L'enfant sauvage se rendort.",chienloup:"Le chien-loup se rendort.",voyante:"La voyante se rendort.",
+  renard:"Le renard se rendort.",salvateur:"Le salvateur se rendort.",loups:"Les loups-garous se rendorment.",
+  infect:"L'infect père des loups se rendort.",gml:"Le grand méchant loup se rendort.",loupblanc:"Le loup blanc se rendort.",
+  sorciere:"La sorcière se rendort.",flute:"Le joueur de flûte se rendort.",corbeau:"Le corbeau se rendort."
+};
+
+/* ---------- compositions ---------- */
+const LEVELS={
+  debutant:{n:"Débutant",d:"Les rôles classiques, parfait pour découvrir.",
+    pick:["voyante","sorciere","chasseur","cupidon","salvateur"]},
+  intermediaire:{n:"Intermédiaire",d:"Quelques rôles malins en plus.",
+    pick:["voyante","sorciere","chasseur","cupidon","salvateur","petitefille","ancien","idiot","renard","corbeau"]},
+  expert:{n:"Expert",d:"Loups spéciaux et rôles solitaires.",
+    pick:["voyante","sorciere","infect","chasseur","flute","salvateur","enfantsauvage","ancien","renard","corbeau","montreur","chevalier"]}
+};
+function wolvesFor(n){return n<=5?1:n<=8?2:n<=10?2:3}
+function autoDeck(n,level){
+  const L=LEVELS[level]||LEVELS.debutant;
+  const deck={};let w=wolvesFor(n);
+  const specials=L.pick.slice();
+  // nombre de rôles spéciaux : on garde au moins 1 villageois simple à partir de 7 joueurs
+  let room=n-w-(n>=7?1:0);
+  for(const r of specials){
+    if(room<=0)break;
+    if(WOLF_ROLES.includes(r)){deck[r]=1;w--;continue}  // un loup spécial remplace un loup simple
+    deck[r]=1;room--;
+  }
+  if(w>0)deck.loup=w;
+  const used=Object.values(deck).reduce((a,b)=>a+b,0);
+  if(n-used>0)deck.villageois=n-used;
+  return deck;
+}
+function deckList(deck){const out=[];Object.keys(deck).forEach(r=>{for(let i=0;i<deck[r];i++)out.push(r)});return out}
+function deckSize(deck){return Object.values(deck).reduce((a,b)=>a+(b||0),0)}
+/* Vérifie une composition. Renvoie {errors:[], warnings:[], fixes:[]} */
+function validate(deck,n){
+  const errors=[],warnings=[],fixes=[];
+  const need=n+(deck.voleur?2:0);
+  const size=deckSize(deck);
+  Object.keys(deck).forEach(r=>{if(!ROLES[r])errors.push("Rôle inconnu : "+r);else if(ROLES[r].impl===false&&deck[r])errors.push(ROLES[r].n+" n'est pas encore jouable.")});
+  Object.keys(deck).forEach(r=>{const R=ROLES[r];if(R&&!R.multi&&!R.group&&deck[r]>1)errors.push("Un seul "+R.n+" par partie.")});
+  if(deck.soeur&&deck.soeur!==2){errors.push("Les Sœurs vont toujours par deux.");fixes.push("Mettez exactement 2 Sœurs.")}
+  if(deck.frere&&deck.frere!==3){errors.push("Les Frères vont toujours par trois.");fixes.push("Mettez exactement 3 Frères.")}
+  if(n<4)errors.push("Il faut au moins 4 joueurs.");
+  if(n>10)errors.push("10 joueurs maximum.");
+  if(size!==need){
+    errors.push("La composition compte "+size+" carte"+(size>1?"s":"")+" pour "+need+" nécessaire"+(need>1?"s":"")+(deck.voleur?" (joueurs + 2 cartes du Voleur)":"")+".");
+    fixes.push(size<need?"Ajoutez "+(need-size)+" Villageois.":"Retirez "+(size-need)+" carte"+(size-need>1?"s":"")+".");
+  }
+  const wolves=WOLF_ROLES.reduce((a,r)=>a+(deck[r]||0),0);
+  const wolvesish=wolves+(deck.enfantsauvage?1:0)+(deck.chienloup?1:0);
+  if(wolves===0&&!deck.chienloup&&!deck.enfantsauvage){errors.push("Il faut au moins un loup-garou.");fixes.push("Ajoutez 1 Loup-Garou.")}
+  else if(wolves===0)warnings.push("Aucun loup au départ : la partie dépendra du Chien-Loup ou de l'Enfant Sauvage.");
+  if(n>=4&&wolves>=n/2){errors.push("Trop de loups : ils gagneraient dès le premier soir.");fixes.push("Retirez "+(wolves-Math.ceil(n/2)+1)+" loup(s).")}
+  else if(n>=4&&wolvesish/n>0.4)warnings.push("Composition déséquilibrée en faveur des loups.");
+  else if(n>=6&&wolves/n<0.15)warnings.push("Composition déséquilibrée en faveur du village.");
+  if(deck.loupblanc&&wolves<2)warnings.push("Le Loup Blanc est plus intéressant avec au moins un autre loup.");
+  if(deck.flute&&n<6)warnings.push("Le Joueur de flûte gagne très vite à moins de 6 joueurs.");
+  if(deck.ange&&n<6)warnings.push("L'Ange est conseillé à partir de 6 joueurs.");
+  if(deck.petitefille&&!wolves)warnings.push("La Petite Fille n'a personne à espionner sans loup.");
+  if(deck.gml&&wolves<2)warnings.push("Le Grand Méchant Loup chasse mieux avec au moins un autre loup.");
+  return {errors,warnings,fixes};
+}
+
+/* =====================================================================
+   MOTEUR
+   io = { say(texte), sfx(nom), changed(), later(fn, ms), now(), rand() }
+   ===================================================================== */
+function Engine(io){
+  let S;
+  const rn=r=>ROLES[r]?ROLES[r].n:r;
+  function freshCfg(old){return old||{mode:"auto",level:"debutant",deck:{},reveal:true,tie:"personne",abstain:true,dayLen:180,voteLen:90}}
+  function reset(keep){
+    const players=keep&&S?S.players.map(p=>({pid:p.pid,name:p.name,bot:p.bot,role:null,alive:true})):[];
+    S={room:S&&keep?S.room:makeRoom(),phase:"lobby",players,cfg:freshCfg(S&&S.cfg),deck:[],extra:[],
+      night:0,day:0,step:null,queue:[],tok:0,cont:null,paused:false,pausedAt:0,
+      narr:"Scannez le code avec votre téléphone pour rejoindre le village.",
+      lovers:null,model:null,powersLost:false,wolfDied:false,infectUsed:false,judgeUsed:false,judgeReq:false,
+      life:true,death:true,lastProt:null,foxPower:true,rust:null,rustNext:null,raven:null,ravenNext:null,angeWindow:false,angeWin:null,
+      votes:{},voteRound:0,voteCands:null,revoteDone:false,toVote:{},dayEnd:0,voteEnd:0,lastVotes:[],
+      deaths:[],hq:[],hunter:null,after:null,winner:null,winners:[],ready:{},notes:{},
+      recap:[],journal:S&&keep?S.journal:[],nv:{}};
+    if(S.cfg.mode==="auto")S.cfg.deck=autoDeck(Math.max(4,players.length),S.cfg.level);
+  }
+  function makeRoom(){const L="ABCDEFGHJKLMNPQRSTUVWXYZ";let s="";for(let i=0;i<4;i++)s+=L[Math.floor(io.rand()*L.length)];return s}
+  S=null;reset(false);
+
+  /* ---------- utilitaires ---------- */
+  const P=i=>S.players[i];
+  const idx=pid=>S.players.findIndex(p=>p.pid===pid);
+  const alive=()=>S.players.map((p,i)=>i).filter(i=>S.players[i].alive);
+  const isWolf=i=>S.players[i].team==="loups";
+  const holders=r=>S.players.map((p,i)=>i).filter(i=>S.players[i].role===r);
+  const aliveWith=r=>holders(r).filter(i=>S.players[i].alive);
+  const inDeck=r=>S.deck.includes(r);
+  const powered=i=>!(S.powersLost&&VILLAGE_POWER.includes(P(i).role));
+  const pickRand=a=>a[Math.floor(io.rand()*a.length)];
+  const note=(i,t,red)=>{const pid=P(i).pid;(S.notes[pid]=S.notes[pid]||[]).push({t,red:!!red})};
+  const journal=t=>{S.journal.push((S.night?"N"+S.night+" ":"")+(S.day?"J"+S.day+" ":"")+t);if(S.journal.length>600)S.journal.shift()};
+  const recap=t=>{S.recap.push(t)};
+  function narr(t,sfx){S.narr=t;journal("📢 "+t);io.say(t);if(sfx)io.sfx(sfx);io.changed()}
+  /* voisins vivants autour de la table (ordre d'arrivée) */
+  function neighbours(i){
+    const a=alive();if(a.length<2)return[];
+    const k=a.indexOf(i);
+    if(k<0){ // joueur mort : voisins vivants les plus proches
+      const n=S.players.length;let l=null,r=null;
+      for(let d=1;d<n&&l===null;d++){const j=(i-d+n)%n;if(P(j).alive)l=j}
+      for(let d=1;d<n&&r===null;d++){const j=(i+d)%n;if(P(j).alive)r=j}
+      return [...new Set([l,r].filter(x=>x!==null))];
+    }
+    return [...new Set([a[(k-1+a.length)%a.length],a[(k+1)%a.length]])].filter(j=>j!==i);
+  }
+  function firstWolfLeft(i){const n=S.players.length;for(let d=1;d<n;d++){const j=(i-d+n)%n;if(P(j).alive&&isWolf(j))return j}return null}
+
+  /* ---------- enchaînements (sérialisables : reprise après rechargement) ---------- */
+  const CONT={nextStep:()=>nextStep(),endStep:()=>endStep(),dawn:()=>dawn(),afterDeaths:a=>afterDeaths(a),startDay:()=>startDay(),goNight:()=>goNight(),hunterSkip:()=>hunterShot(null)};
+  function sched(fn,arg,ms){
+    const t=++S.tok;S.cont={fn,arg,t};
+    io.later(function g(){if(S.tok!==t)return;if(S.paused){io.later(g,500);return}S.cont=null;CONT[fn](arg)},ms);
+  }
+
+  /* ---------- salon ---------- */
+  function join(pid,name,bot){
+    if(S.phase!=="lobby")return;
+    name=String(name||"").replace(/[\u0000-\u001f<>]/g,"").replace(/\s+/g," ").trim().slice(0,16);if(!name)return;
+    const i=idx(pid);
+    const base=name;let k=2;while(S.players.some((p,j)=>j!==i&&p.name.toLowerCase()===name.toLowerCase()))name=base+" "+(k++);
+    if(i>=0)S.players[i].name=name;
+    else if(S.players.length<10){S.players.push({pid,name,bot:!!bot,role:null,alive:true});journal("Arrivée : "+name+(bot?" (robot)":""))}
+    else return;
+    if(S.cfg.mode==="auto")S.cfg.deck=autoDeck(Math.max(4,S.players.length),S.cfg.level);
+    io.changed();
+  }
+  function leave(pid){if(S.phase!=="lobby")return;const i=idx(pid);if(i>=0)kick(i)}
+  function kick(i){
+    if(S.phase!=="lobby"||!P(i))return;journal("Départ : "+P(i).name);S.players.splice(i,1);
+    if(S.cfg.mode==="auto")S.cfg.deck=autoDeck(Math.max(4,S.players.length),S.cfg.level);io.changed();
+  }
+  function move(i,d){if(S.phase!=="lobby")return;const j=i+d;if(!P(i)||!P(j))return;[S.players[i],S.players[j]]=[S.players[j],S.players[i]];io.changed()}
+  function configure(patch){
+    if(S.phase!=="lobby")return;
+    const c=S.cfg;
+    if(patch.level&&LEVELS[patch.level]){c.level=patch.level;c.mode="auto"}
+    if(patch.mode==="auto"||patch.mode==="custom")c.mode=patch.mode;
+    if(patch.role&&ROLES[patch.role]&&ROLES[patch.role].impl!==false){
+      c.mode="custom";const R=ROLES[patch.role];let v=(c.deck[patch.role]||0)+(patch.delta||0);
+      if(R.group)v=patch.delta>0?R.group:0;
+      if(!R.multi&&!R.group)v=Math.max(0,Math.min(1,v));
+      v=Math.max(0,Math.min(10,v));
+      if(v)c.deck[patch.role]=v;else delete c.deck[patch.role];
+    }
+    if(patch.wolves!=null){c.mode="custom";const v=Math.max(0,Math.min(5,patch.wolves));if(v)c.deck.loup=v;else delete c.deck.loup}
+    if(patch.fill){const n=S.players.length,need=n+(c.deck.voleur?2:0),d=need-deckSize(c.deck);
+      if(d>0)c.deck.villageois=(c.deck.villageois||0)+d;
+      if(d<0&&c.deck.villageois)c.deck.villageois=Math.max(0,c.deck.villageois+d);
+      if(!c.deck.villageois)delete c.deck.villageois;c.mode="custom"}
+    ["reveal","abstain"].forEach(k=>{if(typeof patch[k]==="boolean")c[k]=patch[k]});
+    if(["personne","revote","hasard"].includes(patch.tie))c.tie=patch.tie;
+    if(patch.dayLen)c.dayLen=Math.max(30,Math.min(600,patch.dayLen));
+    if(patch.voteLen)c.voteLen=Math.max(20,Math.min(300,patch.voteLen));
+    if(c.mode==="auto")c.deck=autoDeck(Math.max(4,S.players.length),c.level);
+    io.changed();
+  }
+  function check(){return validate(S.cfg.deck,S.players.length)}
+  function start(){
+    if(S.phase!=="lobby")return {ok:false,errors:["La partie a déjà commencé."]};
+    const v=check();if(v.errors.length)return {ok:false,...v};
+    const cards=deckList(S.cfg.deck);
+    for(let i=cards.length-1;i>0;i--){const j=Math.floor(io.rand()*(i+1));[cards[i],cards[j]]=[cards[j],cards[i]]}
+    S.deck=cards.slice();
+    S.extra=cards.length>S.players.length?cards.slice(S.players.length):[];
+    S.players.forEach((p,i)=>{p.role=cards[i];p.orig=cards[i];p.alive=true;p.team=ROLES[cards[i]].camp==="loups"?"loups":"village";
+      p.lives=p.role==="ancien"?2:1;p.canVote=true;p.charmed=false;p.revealed=false;p.ready=false});
+    S.notes={};S.ready={};S.night=0;S.day=0;S.recap=[];S.winner=null;S.winners=[];
+    S.players.forEach((p,i)=>{p.camp0=p.team;journal("Rôle : "+p.name+" = "+rn(p.role))});
+    if(S.extra.length)journal("Cartes du voleur : "+S.extra.map(rn).join(", "));
+    sharePack();shareFamily("soeur","Votre sœur");shareFamily("frere","Vos frères");
+    S.angeWindow=inDeck("ange");
+    S.phase="roles";
+    narr("Les rôles sont distribués. Découvrez le vôtre en secret sur votre téléphone, puis appuyez sur Prêt.","deal");
+    return {ok:true,...v};
+  }
+  function sharePack(){S.players.forEach((p,i)=>{if(isWolf(i)){const m=S.players.map((q,j)=>j).filter(j=>j!==i&&isWolf(j)&&P(j).alive).map(j=>P(j).name);note(i,m.length?"Votre meute : "+m.join(", ")+".":"Vous êtes le seul loup de la meute.")}})}
+  function shareFamily(r,label){const h=holders(r);h.forEach(i=>note(i,label+" : "+h.filter(j=>j!==i).map(j=>P(j).name).join(", ")+"."))}
+  function ready(i){
+    if(S.phase!=="roles")return;S.ready[P(i).pid]=1;io.changed();
+    if(S.players.every(p=>S.ready[p.pid]))beginGame();
+  }
+  function beginGame(){
+    if(S.phase!=="roles")return;
+    if(inDeck("ange")){narr("Un ange se cache parmi vous. La partie commence par un débat !","day");sched("startDay",null,5000);S.phase="dawn";return}
+    goNight();
+  }
+
+  /* ---------- nuit ---------- */
+  function goNight(){
+    S.phase="night";S.night++;S.step=null;
+    S.nv={prot:null,wolfVotes:{},victim:null,infectNow:false,gml:null,white:null,wSave:false,wKill:null,seer:null,fox:null,spy:false,flute:[]};
+    S.queue=STEPS.filter(st=>{
+      if(NIGHT1.includes(st))return S.night===1&&stepRole(st)!==null&&inDeck(stepRole(st));
+      if(st==="loups")return true;
+      if(st==="loupblanc")return inDeck("loupblanc")&&S.night%2===0;
+      return inDeck(stepRole(st));
+    });
+    narr(S.night===1?"La nuit tombe sur le village. Tout le monde ferme les yeux.":"La nuit retombe sur le village. Fermez les yeux.","night");
+    sched("nextStep",null,6500);
+  }
+  function stepRole(st){return {amoureux:"cupidon",loups:"loup",enfantsauvage:"enfantsauvage"}[st]||st}
+  function actors(st){
+    const N=S.nv;
+    switch(st){
+      case "amoureux":return S.lovers?S.lovers.filter(i=>P(i).alive):[];
+      case "loups":return alive().filter(isWolf);
+      case "infect":return !S.infectUsed&&N.victim!==null?aliveWith("infect"):[];
+      case "gml":return !S.wolfDied&&preyFor("gml").length?aliveWith("gml"):[];
+      case "loupblanc":return alive().filter(i=>isWolf(i)&&P(i).role!=="loupblanc").length?aliveWith("loupblanc"):[];
+      case "sorciere":return (S.life||S.death)?aliveWith("sorciere").filter(powered):[];
+      case "renard":return (S.foxPower||S.nv.fox!=null)?aliveWith("renard").filter(powered):[];
+      case "flute":return aliveWith("flute").filter(()=>alive().some(j=>!P(j).charmed&&P(j).role!=="flute"));
+      case "salvateur":case "voyante":case "corbeau":return aliveWith(st).filter(powered);
+      default:return aliveWith(st);
+    }
+  }
+  function preyFor(st){const N=S.nv;return alive().filter(j=>!isWolf(j)&&j!==N.victim)}
+  function nextStep(){
+    const st=S.queue.shift();
+    if(!st){S.step=null;return dawn()}
+    S.step=st;S.stepAt=io.now();
+    narr(WAKE[st]);
+    if(!actors(st).length)sched("endStep",null,6500+Math.floor(io.rand()*4500));
+    else io.changed();
+  }
+  function endStep(){
+    const st=S.step;if(!st)return;
+    if(st==="loups"&&S.nv.victim===null&&actors("loups").length)resolveWolves(true);
+    if(st==="cupidon"&&!S.lovers&&actors("cupidon").length)forceCupid();
+    if(st==="voleur")thiefKeep();
+    S.step=null;
+    narr(SLEEP[st]);
+    sched("nextStep",null,3200);
+  }
+  function forceCupid(){const a=alive();if(a.length<2)return;const x=pickRand(a),y=pickRand(a.filter(j=>j!==x));setLovers(x,y)}
+  function setLovers(a,b){S.lovers=[a,b];[a,b].forEach((x,k)=>note(x,"Vous êtes amoureux de "+P([a,b][1-k]).name+". Si l'un meurt, l'autre meurt de chagrin."));journal("Amoureux : "+P(a).name+" et "+P(b).name)}
+  function thiefKeep(){}
+  function resolveWolves(force){
+    const N=S.nv,ws=alive().filter(isWolf),tally={};
+    ws.forEach(w=>{const v=N.wolfVotes[P(w).pid];if(v!=null&&P(v)&&P(v).alive&&!isWolf(v))tally[v]=(tally[v]||0)+1});
+    const keys=Object.keys(tally);
+    if(!keys.length){if(force){const prey=alive().filter(i=>!isWolf(i));N.victim=prey.length?pickRand(prey):null}}
+    else{const max=Math.max(...keys.map(k=>tally[k]));N.victim=+pickRand(keys.filter(k=>tally[k]===max))}
+    if(N.victim!==null)journal("Victime des loups : "+P(N.victim).name);
+  }
+
+  /* ---------- morts ---------- */
+  function kill(i,why){
+    const p=P(i);if(!p||!p.alive)return;
+    p.alive=false;S.deaths.push({i,why});journal("Mort : "+p.name+" ("+rn(p.role)+") — "+why);
+    if(isWolf(i))S.wolfDied=true;
+    if(S.angeWindow&&p.role==="ange"&&(why==="vote"||S.night<=1))S.angeWin=i;
+    if(p.role==="ancien"&&["vote","potion","chasseur"].includes(why)&&!S.powersLost){S.powersLost=true;S.deaths.push({i,why:"ancien",info:true})}
+    if(p.role==="chasseur"&&powered(i)&&why!=="ancien")S.hq.push(i);
+    if(S.lovers&&S.lovers.includes(i)){const o=S.lovers.find(j=>j!==i);if(P(o).alive)kill(o,"chagrin")}
+    if(S.model===i){const e=aliveWith("enfantsauvage").find(j=>P(j).team!=="loups");
+      if(e!==undefined){P(e).team="loups";note(e,"Votre modèle "+p.name+" est mort : vous devenez loup-garou et rejoignez la meute.",true);
+        alive().filter(j=>isWolf(j)&&j!==e).forEach(j=>note(j,P(e).name+" a rejoint la meute.",true));journal("Enfant sauvage transformé : "+P(e).name)}}
+  }
+  function attack(i,why){
+    const p=P(i);if(!p.alive)return;
+    if(p.role==="ancien"&&p.lives>1){p.lives--;note(i,"Les loups vous ont attaqué, mais vous avez survécu. La prochaine attaque vous sera fatale.",true);journal("L'Ancien résiste");return}
+    kill(i,why);
+    if(p.role==="chevalier"&&powered(i)){const w=firstWolfLeft(i);if(w!==null){S.rustNext=w;journal("Tétanos pour "+P(w).name)}}
+  }
+  function deathLines(){
+    const out=[];
+    S.deaths.forEach(d=>{
+      const p=P(d.i);
+      if(d.info){out.push("L'Ancien a été tué par le village : les villageois perdent tous leurs pouvoirs");return}
+      const role=S.cfg.reveal?" ("+rn(p.role)+")":"";
+      const N=p.name+role;
+      out.push(({loups:"Les loups-garous ont dévoré "+N,gml:"Le grand méchant loup a dévoré "+N,loupblanc:"Le loup blanc a tué "+N,
+        potion:"Une potion de mort a emporté "+N,chagrin:"Par chagrin d'amour, "+N+" rejoint l'être aimé dans la mort",
+        chasseur:"Le chasseur abat "+N,vote:"Le village élimine "+N,rouille:"Le tétanos emporte "+N,bouc:"Le village sacrifie le bouc émissaire : "+N})[d.why]||N+" quitte la partie");
+    });
+    S.deaths=[];return out;
+  }
+  function dawn(){
+    S.phase="dawn";S.step=null;const N=S.nv;
+    if(S.rust!==null){if(P(S.rust).alive)kill(S.rust,"rouille");S.rust=null}
+    if(N.victim!==null){
+      if(N.prot===N.victim)journal("Salvateur : victime protégée");
+      else if(N.wSave)journal("Sorcière : victime sauvée");
+      else if(N.infectNow){const v=N.victim;P(v).team="loups";S.infectUsed=true;
+        note(v,"Vous avez été infecté : vous êtes désormais loup-garou, tout en gardant votre pouvoir.",true);
+        alive().filter(j=>isWolf(j)&&j!==v).forEach(j=>note(j,P(v).name+" a été infecté et rejoint la meute.",true));journal("Infecté : "+P(v).name)}
+      else attack(N.victim,"loups");
+    }
+    if(N.gml!==null&&N.gml!==N.prot)attack(N.gml,"gml");
+    if(N.white!==null&&N.white!==N.prot)kill(N.white,"loupblanc");
+    if(N.wKill!==null)kill(N.wKill,"potion");
+    if(N.flute.length){N.flute.forEach(i=>{if(P(i).alive)P(i).charmed=true});
+      const ch=alive().filter(i=>P(i).charmed);ch.forEach(i=>note(i,"Vous êtes charmé par la flûte. Charmés : "+ch.map(j=>P(j).name).join(", ")+"."))}
+    S.lastProt=N.prot;
+    S.rust=S.rustNext;S.rustNext=null;   // le tétanos frappera à l'aube suivante
+    if(S.night>=1)S.angeWindow=false;
+    if(S.angeWin===null)aliveWith("ange").forEach(i=>{P(i).team="village"});
+    S.raven=S.nv.raven!=null&&P(S.nv.raven)&&P(S.nv.raven).alive?S.nv.raven:null;
+    const lines=deathLines();
+    let txt="Le jour se lève. "+(lines.length?lines.join(". ")+".":"Miracle : personne n'est mort cette nuit.");
+    recap("Nuit "+S.night+" : "+(lines.length?lines.join(", "):"aucune victime"));
+    const bear=aliveWith("montreur").filter(powered);
+    if(bear.length&&neighbours(bear[0]).some(isWolf)){txt+=" Et soudain… l'ours grogne !";journal("L'ours grogne")}
+    narr(txt,lines.length?"death":"day");
+    sched("afterDeaths","day",lines.length?10000:7000);
+  }
+  function afterDeaths(next){
+    if(S.angeWin!==null)return end("ange");
+    if(S.hq.length){
+      S.hunter=S.hq.shift();S.after=next;S.phase="hunter";S.stepAt=io.now();
+      narr(P(S.hunter).name+" était le chasseur. Dans un dernier souffle, le chasseur emporte quelqu'un avec lui.","hunter");
+      if(!alive().some(i=>i!==S.hunter))sched("hunterSkip",null,4000);
+      return;
+    }
+    const w=checkWin();if(w)return end(w);
+    if(next==="day")startDay();
+    else if(next==="vote2")startVote(true);
+    else goNight();
+  }
+  function hunterShot(t){
+    if(S.phase!=="hunter")return;
+    if(t!==null)kill(t,"chasseur");
+    const lines=deathLines();S.phase="dawn";S.hunter=null;
+    if(lines.length)recap("Le chasseur : "+lines.join(", "));
+    narr(lines.length?"Le coup de feu retentit. "+lines.join(". ")+".":"Le chasseur n'a emporté personne.",lines.length?"shot":null);
+    sched("afterDeaths",S.after,7000);
+  }
+  function checkWin(){
+    const a=alive(),W=a.filter(isWolf).length,O=a.length-W;
+    if(a.length===0)return "personne";
+    const fl=aliveWith("flute");
+    if(fl.length&&a.filter(i=>P(i).role!=="flute").every(i=>P(i).charmed))return "flute";
+    if(a.length===1&&P(a[0]).role==="loupblanc")return "loupblanc";
+    if(S.lovers&&a.length===2&&S.lovers.every(i=>P(i).alive)&&isWolf(S.lovers[0])!==isWolf(S.lovers[1]))return "amoureux";
+    if(W===0)return fl.length?null:"village";
+    if(O===0){
+      const lb=aliveWith("loupblanc");
+      if(lb.length&&W>1)return null;   // le loup blanc continue de chasser ses frères
+      return "loups";
+    }
+    return null;
+  }
+  function end(w){
+    S.phase="end";S.winner=w;S.step=null;S.cont=null;S.tok++;
+    const by={village:i=>P(i).team==="village"&&P(i).role!=="flute",loups:i=>isWolf(i)&&P(i).role!=="loupblanc",
+      amoureux:i=>S.lovers&&S.lovers.includes(i),flute:i=>P(i).role==="flute",loupblanc:i=>P(i).role==="loupblanc",ange:i=>P(i).role==="ange",personne:()=>false}[w];
+    S.winners=S.players.map((p,i)=>i).filter(by);
+    narr({village:"Les loups-garous sont démasqués : le village l'emporte !",loups:"Les loups-garous ont dévoré le village. Victoire de la meute !",
+      amoureux:"Seuls les amoureux ont survécu : l'amour triomphe !",flute:"Tout le village est envoûté : le joueur de flûte l'emporte !",
+      loupblanc:"Le loup blanc est le dernier debout. Il gagne seul !",ange:"L'ange a rejoint le ciel dès le premier tour : il gagne seul !",
+      personne:"Il ne reste plus personne au village."}[w],"win");
+    recap("Victoire : "+w);
+  }
+
+  /* ---------- jour ---------- */
+  function startDay(){
+    S.phase="day";S.day++;S.toVote={};S.dayEnd=io.now()+S.cfg.dayLen*1000;S.revoteDone=false;S.voteCands=null;S.judgeReq=false;
+    const m=Math.round(S.cfg.dayLen/60*10)/10;
+    let t="Le village se réunit. Qui sont les loups-garous ? Vous avez "+(m>=1?m+" minute"+(m>1?"s":""):S.cfg.dayLen+" secondes")+" pour débattre.";
+    if(S.raven!==null)t+=" Le corbeau a désigné "+P(S.raven).name+", qui commencera le vote avec deux voix contre lui.";
+    narr(t,"day");
+  }
+  function startVote(again){
+    if(S.phase!=="day"&&S.phase!=="dawn")return;
+    S.phase="vote";S.votes={};S.voteEnd=io.now()+S.cfg.voteLen*1000;
+    narr(again?"Le juge bègue exige un second vote ! Votez à nouveau.":S.voteCands?"Égalité ! Second tour entre "+S.voteCands.map(i=>P(i).name).join(" et ")+".":"Place au vote. Chacun désigne sur son téléphone le joueur à éliminer.","vote");
+  }
+  const voters=()=>alive().filter(i=>P(i).canVote);
+  function resolveVote(){
+    if(S.phase!=="vote")return;
+    const tally={};S.lastVotes=[];
+    voters().forEach(i=>{const v=S.votes[P(i).pid];if(v!=null&&P(v)&&P(v).alive){tally[v]=(tally[v]||0)+1;S.lastVotes.push([i,v])}});
+    if(S.raven!==null&&P(S.raven).alive&&!S.voteCands){tally[S.raven]=(tally[S.raven]||0)+2;S.lastVotes.push([-1,S.raven])}
+    S.raven=null;S.voteRound++;
+    const judge=S.judgeReq;S.judgeReq=false;
+    const nextAfter=judge?"vote2":"night";
+    const keys=Object.keys(tally);
+    S.phase="dawn";
+    if(!keys.length){narr("Personne n'a voté. Le village reste indécis.");recap("Jour "+S.day+" : aucun vote");return sched("afterDeaths",nextAfter,6000)}
+    const max=Math.max(...keys.map(k=>tally[k])),top=keys.filter(k=>tally[k]===max).map(Number);
+    let target=null;
+    if(top.length>1){
+      const bouc=aliveWith("bouc")[0];
+      if(bouc!==undefined){kill(bouc,"bouc");const l=deathLines();narr("Égalité ! Le bouc émissaire paie pour tout le monde. "+l.join(". ")+".","death");recap("Jour "+S.day+" : "+l.join(", "));return sched("afterDeaths",nextAfter,8000)}
+      if(S.cfg.tie==="hasard"){target=pickRand(top);journal("Égalité tranchée au hasard")}
+      else if(S.cfg.tie==="revote"&&!S.revoteDone){S.revoteDone=true;S.voteCands=top;S.phase="day";return startVote(false)}
+      else{narr("Égalité ! Le village n'arrive pas à se décider : personne n'est éliminé.");recap("Jour "+S.day+" : égalité, personne");S.voteCands=null;return sched("afterDeaths",nextAfter,7000)}
+    }else target=top[0];
+    S.voteCands=null;
+    const p=P(target);
+    if(p.role==="idiot"&&!p.revealed&&powered(target)){p.revealed=true;p.canVote=false;
+      narr(p.name+" est désigné… mais c'est l'idiot du village ! On l'épargne, mais il ne votera plus.","reveal");recap("Jour "+S.day+" : "+p.name+" (Idiot) épargné");return sched("afterDeaths",nextAfter,8000)}
+    kill(target,"vote");
+    const l=deathLines();
+    narr("Le village a tranché. "+l.join(". ")+".","death");recap("Jour "+S.day+" : "+l.join(", "));
+    sched("afterDeaths",nextAfter,8000);
+  }
+
+  /* ---------- actions des joueurs ---------- */
+  function act(a){
+    if(!a||typeof a!=="object"||typeof a.pid!=="string"||!/^[A-Za-z0-9]{8,32}$/.test(a.pid))return false;
+    if(a.room!==undefined&&a.room!==S.room)return false;
+    if(a.t==="join")return join(a.pid,a.name,a.bot),true;
+    if(a.t==="leave")return leave(a.pid),true;
+    const i=idx(a.pid);if(i<0)return false;
+    const me=P(i);if(S.paused)return false;
+    const N=S.nv;
+    const valid=x=>Number.isInteger(x)&&P(x)&&P(x).alive;
+    const mine=r=>me.role===r&&me.alive;
+    switch(a.t){
+      case "ready":ready(i);return true;
+      case "thief":
+        if(S.step==="voleur"&&mine("voleur")){
+          const both=S.extra.length===2&&S.extra.every(r=>ROLES[r].camp==="loups");
+          if(a.c===0||a.c===1){const nr=S.extra[a.c];S.extra[a.c]="voleur";me.role=nr;me.team=ROLES[nr].camp==="loups"?"loups":"village";if(nr==="ancien")me.lives=2;
+            note(i,"Vous avez pris la carte "+rn(nr)+".");journal("Le voleur devient "+rn(nr));
+            if(me.team==="loups"){alive().filter(j=>isWolf(j)&&j!==i).forEach(j=>note(j,me.name+" a rejoint la meute (voleur)."));sharePackOne(i)}}
+          else if(both)return false;
+          endStep();return true}
+        return false;
+      case "cupid":if(S.step==="cupidon"&&mine("cupidon")&&!S.lovers&&valid(a.a)&&valid(a.b)&&a.a!==a.b){setLovers(a.a,a.b);note(i,"Vous avez uni "+P(a.a).name+" et "+P(a.b).name+".");endStep();return true}return false;
+      case "ok":
+        if(S.step==="amoureux"&&S.lovers&&S.lovers.includes(i)){(S.nv.loverOk=S.nv.loverOk||{})[a.pid]=1;io.changed();if(actors("amoureux").every(x=>S.nv.loverOk[P(x).pid]))endStep();return true}
+        if(S.step==="voyante"&&mine("voyante")&&N.seer!==null){endStep();return true}
+        if(S.step==="renard"&&mine("renard")&&N.fox!==null){endStep();return true}
+        return false;
+      case "choose":
+        if(S.step==="chienloup"&&mine("chienloup")&&(a.v==="village"||a.v==="loups")){
+          if(a.v==="loups"){me.team="loups";note(i,"Vous avez rejoint la meute.",true);alive().filter(j=>isWolf(j)&&j!==i).forEach(j=>note(j,me.name+" (chien-loup) a rejoint la meute.",true));sharePackOne(i)}
+          else note(i,"Vous restez fidèle au village.");
+          journal("Chien-loup : "+a.v);endStep();return true}
+        if(S.step==="infect"&&mine("infect")&&!S.infectUsed&&N.victim!==null&&(a.v==="infect"||a.v==="kill")){N.infectNow=a.v==="infect";journal("Infect : "+a.v);endStep();return true}
+        return false;
+      case "pass":
+        if((S.step==="corbeau"&&mine("corbeau"))||(S.step==="loupblanc"&&mine("loupblanc"))||(S.step==="gml"&&mine("gml"))){endStep();return true}
+        return false;
+      case "flute":
+        if(S.step==="flute"&&mine("flute")){
+          const ok=x=>valid(x)&&x!==i&&!P(x).charmed;const pool=alive().filter(ok);
+          const picks=[a.a,a.b].filter(ok);const uniq=[...new Set(picks)];
+          if(uniq.length===Math.min(2,pool.length)&&uniq.length>0){N.flute=uniq;journal("Flûte : "+uniq.map(x=>P(x).name).join(", "));endStep();return true}}
+        return false;
+      case "witch":
+        if(S.step==="sorciere"&&mine("sorciere")&&powered(i)){
+          if(a.save&&S.life&&N.victim!==null){N.wSave=true;S.life=false}
+          if(S.death&&valid(a.kill)&&a.kill!==i){N.wKill=a.kill;S.death=false}
+          endStep();return true}
+        return false;
+      case "spy":
+        if(S.step==="loups"&&mine("petitefille")&&powered(i)&&!N.spy){
+          N.spy=true;const ws=alive().filter(isWolf);
+          if(ws.length){const w=pickRand(ws);note(i,"Nuit "+S.night+" : vous apercevez "+P(w).name+" parmi les loups.",true);
+            if(io.rand()<0.3){ws.forEach(x=>note(x,"Nuit "+S.night+" : la petite fille vous a espionnés ! C'est "+me.name+".",true));journal("Petite fille repérée")}}
+          io.changed();return true}
+        return false;
+      case "tovote":if(S.phase==="day"&&me.alive){S.toVote[a.pid]=1;io.changed();const a2=alive();if(a2.filter(j=>S.toVote[P(j).pid]).length*2>a2.length)startVote(false);return true}return false;
+      case "abstain":if(S.phase==="vote"&&me.alive&&me.canVote&&S.cfg.abstain){S.votes[me.pid]=-1;io.changed();if(voters().every(j=>S.votes[P(j).pid]!=null))resolveVote();return true}return false;
+      case "judge":if(S.phase==="vote"&&mine("juge")&&powered(i)&&!S.judgeUsed){S.judgeUsed=true;S.judgeReq=true;journal("Le juge demande un second vote");io.changed();return true}return false;
+      case "pick":return pick(i,a.target);
+    }
+    return false;
+  }
+  function sharePackOne(i){const m=alive().filter(j=>isWolf(j)&&j!==i).map(j=>P(j).name);note(i,m.length?"Votre meute : "+m.join(", ")+".":"Vous êtes le seul loup.",true)}
+  function pick(i,x){
+    const me=P(i),N=S.nv;
+    const valid=Number.isInteger(x)&&P(x)&&P(x).alive;
+    if(S.phase==="hunter"&&i===S.hunter){if(valid&&x!==i){hunterShot(x);return true}return false}
+    if(S.phase==="vote"){
+      if(!me.alive||!me.canVote||!valid||x===i)return false;
+      if(S.voteCands&&!S.voteCands.includes(x))return false;
+      S.votes[me.pid]=x;io.changed();
+      if(voters().every(j=>S.votes[P(j).pid]!=null))resolveVote();
+      return true;
+    }
+    if(!me.alive||!valid)return false;
+    const st=S.step;
+    if(st==="voyante"&&me.role==="voyante"&&powered(i)&&N.seer===null&&x!==i){
+      N.seer=x;const r=P(x).role,wolfNow=isWolf(x)&&!WOLF_ROLES.includes(r);
+      note(i,"Nuit "+S.night+" : "+P(x).name+" est "+rn(r)+(wolfNow?" (devenu loup-garou)":"")+".",isWolf(x));io.changed();return true}
+    if(st==="renard"&&me.role==="renard"&&powered(i)&&N.fox===null&&S.foxPower){
+      N.fox=x;const grp=[x,...neighbours(x)];const found=grp.some(isWolf);
+      note(i,"Nuit "+S.night+" : autour de "+P(x).name+" ("+grp.map(j=>P(j).name).join(", ")+") : "+(found?"vous flairez au moins un loup !":"aucun loup. Votre flair vous abandonne."),found);
+      if(!found)S.foxPower=false;io.changed();return true}
+    if(st==="salvateur"&&me.role==="salvateur"&&powered(i)&&x!==S.lastProt){N.prot=x;journal("Protégé : "+P(x).name);endStep();return true}
+    if(st==="enfantsauvage"&&me.role==="enfantsauvage"&&x!==i&&S.model===null){S.model=x;note(i,"Votre modèle : "+P(x).name+". S'il meurt, vous deviendrez loup-garou.");journal("Modèle : "+P(x).name);endStep();return true}
+    if(st==="loups"&&isWolf(i)&&!isWolf(x)){
+      N.wolfVotes[me.pid]=x;N.victim=null;
+      const ws=alive().filter(isWolf),vs=ws.map(w=>N.wolfVotes[P(w).pid]);
+      if(vs.every(v=>v!=null)){
+        if(vs.every(v=>v===vs[0])){resolveWolves(false);sched("endStep",null,2500)}
+        else sched("endStep",null,15000);   // désaccord : la majorité l'emporte au bout de 15 s (tirage au sort si égalité)
+      }
+      io.changed();return true}
+    if(st==="gml"&&me.role==="gml"&&!S.wolfDied&&!isWolf(x)&&x!==N.victim){N.gml=x;journal("Grand méchant loup : "+P(x).name);endStep();return true}
+    if(st==="loupblanc"&&me.role==="loupblanc"&&isWolf(x)&&x!==i){N.white=x;journal("Loup blanc : "+P(x).name);endStep();return true}
+    if(st==="corbeau"&&me.role==="corbeau"&&powered(i)&&x!==i){N.raven=x;journal("Corbeau : "+P(x).name);endStep();return true}
+    return false;
+  }
+
+  /* ---------- commandes de la télé ---------- */
+  function force(){
+    if(S.paused)return;
+    if(S.phase==="roles"){S.players.forEach(p=>S.ready[p.pid]=1);return beginGame()}
+    if(S.phase==="night"&&S.step)return endStep();
+    if(S.phase==="hunter")return hunterShot(null);
+    if(S.phase==="day")return startVote(false);
+    if(S.phase==="vote")return resolveVote();
+  }
+  function tick(){
+    if(S.paused)return;
+    if(S.phase==="night"&&S.step&&S.stepAt&&io.now()-S.stepAt>STEP_LIMIT&&actors(S.step).length){journal("Temps écoulé : "+S.step);endStep();return}
+    if(S.phase==="hunter"&&S.stepAt&&io.now()-S.stepAt>STEP_LIMIT){journal("Temps écoulé : chasseur");hunterShot(null);return}
+    if(S.phase==="day"&&io.now()>=S.dayEnd)startVote(false);
+    else if(S.phase==="vote"&&io.now()>=S.voteEnd)resolveVote();
+  }
+  function pause(){
+    if(S.phase==="lobby"||S.phase==="end")return;
+    if(!S.paused){S.paused=true;S.pausedAt=io.now();io.say("La partie est en pause.")}
+    else{const d=io.now()-S.pausedAt;S.paused=false;S.dayEnd+=d;S.voteEnd+=d;if(S.stepAt)S.stepAt+=d;io.say("La partie reprend.")}
+    io.changed();
+  }
+  function newGame(){S.tok++;reset(true);io.changed()}
+  function create(){S.tok++;reset(false);io.changed()}   // nouveau salon : nouveau code, salon vide
+  function abandon(){S.tok++;end("personne");S.narr="Partie abandonnée.";io.changed()}
+  /* reprise après rechargement de la page télé */
+  function restore(saved){
+    if(!saved||!saved.players)return false;
+    S=saved;S.tok++;
+    if(S.cont){const c=S.cont;S.cont=null;sched(c.fn,c.arg,2500)}
+    else if(S.phase==="night"&&S.step&&!actors(S.step).length)sched("endStep",null,2500);
+    else if(S.phase==="night"&&!S.step)sched("nextStep",null,2500);
+    io.changed();return true;
+  }
+
+  /* ---------- vues (publique / privées) ---------- */
+  function view(){
+    const show=S.phase==="end";
+    const pub={room:S.room,paused:S.paused,phase:S.phase,night:S.night,day:S.day,narr:S.narr,now:io.now(),
+      dayEnd:S.dayEnd,voteEnd:S.voteEnd,winner:S.winner,
+      cfg:{mode:S.cfg.mode,level:S.cfg.level,deck:S.cfg.deck,reveal:S.cfg.reveal,tie:S.cfg.tie,abstain:S.cfg.abstain,dayLen:S.cfg.dayLen,voteLen:S.cfg.voteLen},
+      check:S.phase==="lobby"?check():null,
+      deckSummary:S.phase==="lobby"?null:countDeck(S.deck),
+      players:S.players.map((p,i)=>{
+        const showRole=show||(!p.alive&&S.cfg.reveal)||p.revealed;
+        return {n:p.name,bot:!!p.bot,a:p.alive,r:showRole&&p.role?rn(p.role):null,ic:showRole&&p.role?ROLES[p.role].ic:null,
+          w:showRole&&isWolf(i),l:show&&S.lovers&&S.lovers.includes(i),win:show&&S.winners.includes(i),
+          ok:S.phase==="roles"?!!S.ready[p.pid]:undefined,nv:p.role&&!p.canVote&&p.alive?true:undefined,
+          ch:show&&p.charmed}}),
+      voted:S.phase==="vote"?S.players.map(p=>S.votes[p.pid]!=null):[],
+      voters:S.phase==="vote"?voters().length:0,
+      toVote:S.phase==="day"?Object.keys(S.toVote).length:0,
+      lastVotes:S.phase==="dawn"||S.phase==="hunter"||S.phase==="end"?S.lastVotes:[],
+      cands:S.voteCands,
+      recap:show?S.recap:S.recap.slice(-3),
+      secrets:show?S.journal.filter(l=>!l.includes("📢")):null};
+    const priv={};
+    S.players.forEach((p,i)=>{priv[p.pid]=privView(i)});
+    return {pub,priv};
+  }
+  function countDeck(d){const c={};d.forEach(r=>c[r]=(c[r]||0)+1);return c}
+  function privView(i){
+    const p=P(i),N=S.nv||{};
+    const v={i,name:p.name,alive:p.alive,room:S.room,role:p.role,rn:p.role?rn(p.role):null,ic:p.role?ROLES[p.role].ic:null,
+      team:p.team,camp:p.role?(p.role==="loupblanc"?"Solitaire, caché dans la meute":p.team==="loups"?"Loups-garous":p.role==="ange"&&!S.angeWindow?"Village (l'ange est devenu villageois)":ROLES[p.role].solo?"Solitaire":"Village"):null,
+      fiche:p.role?{d:ROLES[p.role].d,pouvoir:ROLES[p.role].pouvoir,moment:ROLES[p.role].moment,limites:ROLES[p.role].limites,victoire:ROLES[p.role].victoire}:null,
+      canVote:p.canVote!==false,powersLost:S.powersLost&&VILLAGE_POWER.includes(p.role),
+      notes:S.notes[p.pid]||[],p:null};
+    const others=alive().filter(j=>j!==i).map(j=>({i:j,n:P(j).name}));
+    const all=alive().map(j=>({i:j,n:P(j).name}));
+    const st=S.step;
+    const q=x=>{v.p=x};
+    if(S.phase==="lobby")q({k:"lobby"});
+    else if(S.phase==="end")q({k:"end",won:S.winners.includes(i)});
+    else if(S.phase==="roles")q({k:"reveal",ready:!!S.ready[p.pid]});
+    else if(S.phase==="hunter"&&i===S.hunter)q({k:"pick",title:"Vous mourez… mais vous emportez quelqu'un avec vous.",choices:others,red:true,cta:"Tirer"});
+    else if(!p.alive)q({k:"dead"});
+    else if(S.phase==="night"){
+      q({k:"sleep"});
+      const act=st&&actors(st).includes(i);
+      if(st==="loups"&&p.role==="petitefille"&&powered(i))q({k:"spy",used:!!N.spy});
+      if(act){
+        if(st==="voleur"){const both=S.extra.every(r=>ROLES[r].camp==="loups");q({k:"thief",cards:S.extra.map(rn),icons:S.extra.map(r=>ROLES[r].ic),must:both})}
+        if(st==="cupidon")q({k:"cupid",choices:all});
+        if(st==="amoureux")q({k:"lovers",other:P(S.lovers.find(j=>j!==i)).name,done:!!(N.loverOk&&N.loverOk[p.pid])});
+        if(st==="enfantsauvage")q({k:"pick",title:"Choisissez votre modèle.",hint:"S'il meurt, vous deviendrez loup-garou.",choices:others,cta:"Choisir"});
+        if(st==="chienloup")q({k:"choice",title:"Quel camp choisissez-vous ?",options:[{v:"village",l:"Rester fidèle au village"},{v:"loups",l:"Rejoindre la meute",red:true}]});
+        if(st==="voyante")q(N.seer===null?{k:"pick",title:"Quel joueur voulez-vous sonder ?",choices:others,cta:"Sonder"}:{k:"result",title:"Votre vision",text:(S.notes[p.pid]||[]).slice(-1)[0].t});
+        if(st==="renard")q(N.fox===null?{k:"pick",title:"Autour de quel joueur voulez-vous flairer ?",hint:"Vous saurez si lui ou l'un de ses deux voisins est un loup.",choices:all,cta:"Flairer"}:{k:"result",title:"Votre flair",text:(S.notes[p.pid]||[]).slice(-1)[0].t});
+        if(st==="salvateur")q({k:"pick",title:"Qui protégez-vous cette nuit ?",choices:all.filter(c=>c.i!==S.lastProt),hint:S.lastProt!==null&&P(S.lastProt).alive?"Vous ne pouvez pas protéger "+P(S.lastProt).name+" deux nuits de suite.":"",cta:"Protéger"});
+        if(st==="loups")q({k:"wolves",choices:alive().filter(j=>!isWolf(j)).map(j=>({i:j,n:P(j).name})),mine:N.wolfVotes[p.pid]!=null?N.wolfVotes[p.pid]:null,
+          pack:alive().filter(isWolf).map(w=>({n:P(w).name,t:N.wolfVotes[P(w).pid]!=null?P(N.wolfVotes[P(w).pid]).name:null})),chosen:N.victim!==null?P(N.victim).name:null});
+        if(st==="infect")q({k:"choice",title:"La meute a choisi "+P(N.victim).name+".",hint:"Une seule fois dans la partie, vous pouvez l'infecter : il deviendra loup-garou au lieu de mourir.",options:[{v:"infect",l:"Infecter",red:true},{v:"kill",l:"Le laisser mourir"}]});
+        if(st==="gml")q({k:"pick",title:"Choisissez une deuxième victime.",choices:alive().filter(j=>!isWolf(j)&&j!==N.victim).map(j=>({i:j,n:P(j).name})),red:true,cta:"Dévorer",optional:true});
+        if(st==="loupblanc")q({k:"pick",title:"Voulez-vous éliminer un loup ?",choices:alive().filter(j=>isWolf(j)&&j!==i).map(j=>({i:j,n:P(j).name})),red:true,cta:"Éliminer",optional:true});
+        if(st==="sorciere")q({k:"witch",victim:N.victim!==null?P(N.victim).name:null,life:S.life,death:S.death,choices:others});
+        if(st==="flute"){const c=alive().filter(j=>j!==i&&!P(j).charmed).map(j=>({i:j,n:P(j).name}));q({k:"flute",choices:c,need:Math.min(2,c.length)})}
+        if(st==="corbeau")q({k:"pick",title:"Qui accusez-vous ?",hint:"Ce joueur commencera le prochain vote avec 2 voix contre lui.",choices:others,cta:"Accuser",optional:true});
+      }
+    }
+    else if(S.phase==="day")q({k:"day",asked:!!S.toVote[p.pid]});
+    else if(S.phase==="vote"){
+      if(!p.canVote)q({k:"novote"});
+      else q({k:"vote",choices:(S.voteCands?S.voteCands.filter(j=>j!==i&&P(j).alive):alive().filter(j=>j!==i)).map(j=>({i:j,n:P(j).name})),mine:S.votes[p.pid]!=null?S.votes[p.pid]:null,
+        judge:p.role==="juge"&&powered(i)&&!S.judgeUsed,judgeOn:p.role==="juge"&&S.judgeReq,abstain:S.cfg.abstain,abstained:S.votes[p.pid]===-1});
+    }
+    else q({k:"wait"});
+    return v;
+  }
+
+  return {act,start,force,tick,pause,newGame,create,abandon,kick,move,configure,check,restore,view,
+    get state(){return S},serialize(){return JSON.parse(JSON.stringify(S))}};
+}
+
+/* Décision d'un robot (mode démonstration et tests) : renvoie une action ou null. */
+function botDecide(v,rand){
+  const pr=v&&v.p;if(!pr)return null;
+  const c=pr.choices||[];const pick=()=>c[Math.floor(rand()*c.length)];
+  switch(pr.k){
+    case "reveal":return pr.ready?null:{t:"ready"};
+    case "thief":return {t:"thief",c:pr.must||rand()<0.5?Math.floor(rand()*2):null};
+    case "cupid":if(c.length<2)return null;{const a=pick();let b=pick();let g=0;while(b.i===a.i&&g++<20)b=pick();return {t:"cupid",a:a.i,b:b.i}}
+    case "lovers":return pr.done?null:{t:"ok"};
+    case "result":return {t:"ok"};
+    case "choice":return {t:"choose",v:pr.options[Math.floor(rand()*pr.options.length)].v};
+    case "pick":if(pr.optional&&rand()<0.25)return {t:"pass"};return c.length?{t:"pick",target:pick().i}:(pr.optional?{t:"pass"}:null);
+    case "wolves":{if(pr.mine!=null||!c.length)return null;const lead=pr.pack.find(w=>w.t);const t=lead?c.find(x=>x.n===lead.t):null;return {t:"pick",target:(t||pick()).i}}
+    case "spy":return !pr.used&&rand()<0.4?{t:"spy"}:null;
+    case "witch":return {t:"witch",save:pr.life&&!!pr.victim&&rand()<0.5,kill:pr.death&&rand()<0.25&&c.length?pick().i:null};
+    case "flute":{if(!c.length)return null;const a=pick();let b=pick();let g=0;while(c.length>1&&b.i===a.i&&g++<20)b=pick();return {t:"flute",a:a.i,b:b.i}}
+    case "day":return pr.asked?null:{t:"tovote"};
+    case "vote":if(pr.mine!=null)return null;if(pr.judge&&rand()<0.2)return {t:"judge"};if(pr.abstain&&rand()<0.1)return {t:"abstain"};return c.length?{t:"pick",target:pick().i}:null;
+  }
+  return null;
+}
+const API={botDecide,Engine,ROLES,CAMP,LEVELS,UNDOCUMENTED,STEPS,WAKE,autoDeck,validate,deckList,deckSize,WOLF_ROLES};
+if(typeof module!=="undefined"&&module.exports)module.exports=API;else root.LG=API;
+})(typeof window!=="undefined"?window:this);

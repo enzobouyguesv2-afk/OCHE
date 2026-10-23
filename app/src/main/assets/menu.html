@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Soirée</title>
+<style>
+:root{--bg:#101311;--panel:#181d1a;--line:#2a322d;--sisal:#efe6cf;--muted:#9aa395;--red:#d2412f;--night:#16182b;--moon:#e9e1c4;color-scheme:dark}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--sisal);font-family:"Barlow Semi Condensed","Arial Narrow",sans-serif;display:grid;place-items:center;padding:24px;box-sizing:border-box}
+h1{font-size:clamp(28px,3vw,44px);margin:0 0 28px;text-align:center;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.games{display:grid;grid-template-columns:1fr 1fr;gap:28px;width:min(1100px,100%)}
+a{display:grid;gap:10px;padding:36px 32px;border-radius:22px;text-decoration:none;color:var(--sisal);border:3px solid transparent;outline:none;transition:transform .15s}
+a:focus,a:hover{border-color:var(--sisal);transform:scale(1.03)}
+a b{font-size:clamp(44px,5.5vw,84px);line-height:.95;font-weight:800;text-transform:uppercase}
+a span{font-size:clamp(16px,1.6vw,24px);color:var(--muted)}
+.darts{background:radial-gradient(circle at 85% 20%,rgba(42,138,87,.35),transparent 50%),var(--panel)}
+.wolf{background:radial-gradient(circle at 85% 18%,rgba(233,225,196,.28) 0 8%,transparent 30%),var(--night)}
+@media (prefers-reduced-motion:reduce){a{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Ce soir, on joue à…</h1>
+  <div class="games">
+    <a class="darts" id="g-darts" href="#"><b>Fléchettes</b><span>501, 301, Cricket, Horloge</span></a>
+    <a class="wolf" id="g-wolf" href="#"><b>Loup-Garou Ultimate</b><span>4 à 10 joueurs, la télé est le maître du jeu</span></a>
+  </div>
+</main>
+<script>
+const q=location.search;
+document.getElementById("g-darts").href="/"+q;
+document.getElementById("g-wolf").href="/loup"+q;
+const a=[...document.querySelectorAll("a")];a[0].focus();
+document.addEventListener("keydown",e=>{
+  const i=a.indexOf(document.activeElement);
+  if(e.key==="ArrowRight"||e.key==="ArrowDown"){a[Math.min(a.length-1,i+1)].focus();e.preventDefault()}
+  if(e.key==="ArrowLeft"||e.key==="ArrowUp"){a[Math.max(0,i-1)].focus();e.preventDefault()}
+});
+</script>
+</body>
+</html>
