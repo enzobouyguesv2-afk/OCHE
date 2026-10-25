@@ -1,0 +1,380 @@
+/* BATTLESHIP ARENA TV — moteur de règles (autorité de la partie, exécuté sur la télé).
+   Aucun affichage ici : salon, placement, tirs, tours, victoire, IA et vues filtrées (rien de secret dans la vue publique). */
+(function (root, factory) {
+  const M = factory();
+  if (typeof module === "object" && module.exports) module.exports = M; else root.BN = M;
+})(typeof self !== "undefined" ? self : this, function () {
+  "use strict";
+  const N = 10;
+  const COLS = "ABCDEFGHIJ";
+  const SHIPS = [
+    { type: "carrier", name: "Porte-avions", len: 5 },
+    { type: "battleship", name: "Cuirassé", len: 4 },
+    { type: "cruiser", name: "Croiseur", len: 3 },
+    { type: "submarine", name: "Sous-marin", len: 3 },
+    { type: "destroyer", name: "Destroyer", len: 2 }
+  ];
+  const SHIP = Object.fromEntries(SHIPS.map(s => [s.type, s]));
+  const PH = { LOBBY: "LOBBY", PLACEMENT: "PLACEMENT", BATTLE: "BATTLE", GAME_OVER: "GAME_OVER" };
+  const AVATARS = ["ancre", "barre", "boussole", "phare", "radar", "etoile", "vague", "aileron"];
+  const LIMITS = { nameMax: 14, actBurst: 12, actWindowMs: 3000, lobbyIdleMs: 2 * 3600e3, saveMaxAgeMs: 12 * 3600e3, aiDelayMs: 1700, aiSalvoDelayMs: 2300 };
+  const TOKEN_RE = /^[A-Za-z0-9]{16,40}$/;
+  const label = (r, c) => COLS[c] + (r + 1);
+  const key = (r, c) => r * N + c;
+
+  function rng(seed) { let s = (seed >>> 0) || 0x9e3779b9; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
+  function cleanName(s) {
+    if (typeof s !== "string") return { ok: false, err: "Pseudo manquant." };
+    const n = s.replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩<>]/g, "").replace(/\s+/g, " ").trim();
+    if (!n) return { ok: false, err: "Choisis un pseudo." };
+    if ([...n].length > LIMITS.nameMax) return { ok: false, err: "Pseudo trop long (14 caractères maximum)." };
+    if (!/[\p{L}\p{N}]/u.test(n)) return { ok: false, err: "Le pseudo doit contenir une lettre ou un chiffre." };
+    return { ok: true, name: n };
+  }
+  const nameKey = n => String(n).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, "");
+
+  /* ---------- flotte ---------- */
+  /* placement demandé : [{type, r, c, dir:"h"|"v"}] -> flotte : [{type, cells:[[r,c]…]}] */
+  function buildFleet(spec) {
+    if (!Array.isArray(spec) || spec.length !== SHIPS.length) return { ok: false, err: "Il faut placer les 5 navires." };
+    const seen = new Set(), used = new Set(), fleet = [];
+    for (const s of spec) {
+      if (!s || typeof s !== "object" || !SHIP[s.type]) return { ok: false, err: "Navire inconnu." };
+      if (seen.has(s.type)) return { ok: false, err: "Navire en double : " + SHIP[s.type].name + "." };
+      seen.add(s.type);
+      if (!Number.isInteger(s.r) || !Number.isInteger(s.c) || (s.dir !== "h" && s.dir !== "v")) return { ok: false, err: "Position invalide." };
+      const cells = [];
+      for (let i = 0; i < SHIP[s.type].len; i++) {
+        const r = s.r + (s.dir === "v" ? i : 0), c = s.c + (s.dir === "h" ? i : 0);
+        if (r < 0 || c < 0 || r >= N || c >= N) return { ok: false, err: SHIP[s.type].name + " sort de la grille." };
+        const k = key(r, c);
+        if (used.has(k)) return { ok: false, err: SHIP[s.type].name + " chevauche un autre navire." };
+        used.add(k); cells.push([r, c]);
+      }
+      fleet.push({ type: s.type, r: s.r, c: s.c, dir: s.dir, cells });
+    }
+    return { ok: true, fleet };
+  }
+  function autoPlace(rand) {
+    for (let tries = 0; tries < 500; tries++) {
+      const spec = [], used = new Set(); let ok = true;
+      for (const sh of SHIPS) {
+        let placed = false;
+        for (let t = 0; t < 200 && !placed; t++) {
+          const dir = rand() < 0.5 ? "h" : "v", r = Math.floor(rand() * (dir === "v" ? N - sh.len + 1 : N)), c = Math.floor(rand() * (dir === "h" ? N - sh.len + 1 : N));
+          const cells = []; for (let i = 0; i < sh.len; i++) cells.push(key(r + (dir === "v" ? i : 0), c + (dir === "h" ? i : 0)));
+          if (cells.some(k => used.has(k))) continue;
+          cells.forEach(k => used.add(k)); spec.push({ type: sh.type, r, c, dir }); placed = true;
+        }
+        if (!placed) { ok = false; break; }
+      }
+      if (ok) return spec;
+    }
+    throw new Error("placement automatique impossible");
+  }
+
+  /* ---------- IA ---------- */
+  /* vue de l'IA : uniquement ses propres tirs et leurs résultats (pas de triche) */
+  function aiChoose(level, shots, sunkTypes, rand, count) {
+    const tried = new Set(Object.keys(shots).map(Number));
+    const free = []; for (let k = 0; k < N * N; k++) if (!tried.has(k)) free.push(k);
+    const out = [];
+    const pick = arr => arr[Math.floor(rand() * arr.length)];
+    const hitsOpen = Object.entries(shots).filter(([, v]) => v.res === "hit").map(([k]) => +k);   // touchés pas encore coulés
+    for (let n = 0; n < count && free.length; n++) {
+      let choice = null;
+      const avail = free.filter(k => !out.includes(k));
+      if (level === "facile") {
+        if (hitsOpen.length && rand() < 0.35) { const nb = neighbours(pick(hitsOpen)).filter(k => avail.includes(k)); if (nb.length) choice = pick(nb); }
+        if (choice == null) choice = pick(avail);
+      } else if (level === "normal") {
+        if (hitsOpen.length) {
+          const line = lineTargets(hitsOpen, avail);
+          const nb = line.length ? line : [].concat(...hitsOpen.map(neighbours)).filter(k => avail.includes(k));
+          if (nb.length) choice = pick(nb);
+        }
+        if (choice == null) { const par = avail.filter(k => ((k / N | 0) + (k % N)) % 2 === 0); choice = pick(par.length ? par : avail); }
+      } else {
+        choice = densityBest(shots, sunkTypes, avail, out, rand);
+      }
+      out.push(choice);
+    }
+    return out.map(k => [k / N | 0, k % N]);
+  }
+  function neighbours(k) { const r = k / N | 0, c = k % N, o = []; if (r > 0) o.push(k - N); if (r < N - 1) o.push(k + N); if (c > 0) o.push(k - 1); if (c < N - 1) o.push(k + 1); return o; }
+  function lineTargets(hits, avail) {
+    const set = new Set(hits), out = [];
+    for (const h of hits) {
+      const r = h / N | 0, c = h % N;
+      if (set.has(h + 1) && c < N - 1 || set.has(h - 1) && c > 0) {          // ligne horizontale
+        let a = c, b = c; while (a > 0 && set.has(r * N + a - 1)) a--; while (b < N - 1 && set.has(r * N + b + 1)) b++;
+        [r * N + a - 1, r * N + b + 1].forEach((k, i) => { if ((i ? b < N - 1 : a > 0) && avail.includes(k)) out.push(k); });
+      }
+      if (set.has(h + N) || set.has(h - N)) {
+        let a = r, b = r; while (a > 0 && set.has((a - 1) * N + c)) a--; while (b < N - 1 && set.has((b + 1) * N + c)) b++;
+        [(a - 1) * N + c, (b + 1) * N + c].forEach((k, i) => { if ((i ? b < N - 1 : a > 0) && avail.includes(k)) out.push(k); });
+      }
+    }
+    return out;
+  }
+  function densityBest(shots, sunkTypes, avail, pending, rand) {
+    const remainingLens = []; const sunkCount = {}; sunkTypes.forEach(t => { sunkCount[t] = (sunkCount[t] || 0) + 1; });
+    SHIPS.forEach(s => { if (sunkCount[s.type]) sunkCount[s.type]--; else remainingLens.push(s.len); });
+    const miss = new Set(), hit = new Set(), dead = new Set();
+    Object.entries(shots).forEach(([k, v]) => { if (v.res === "miss") miss.add(+k); else if (v.res === "hit") hit.add(+k); else dead.add(+k); });
+    pending.forEach(k => miss.add(k));
+    const score = new Array(N * N).fill(0);
+    for (const len of remainingLens) for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) for (const d of ["h", "v"]) {
+      const cells = []; let bad = false, hits = 0;
+      for (let i = 0; i < len; i++) {
+        const rr = r + (d === "v" ? i : 0), cc = c + (d === "h" ? i : 0);
+        if (rr >= N || cc >= N) { bad = true; break; }
+        const k = rr * N + cc; if (miss.has(k) || dead.has(k)) { bad = true; break; }
+        if (hit.has(k)) hits++; cells.push(k);
+      }
+      if (bad) continue;
+      const w = hits ? Math.pow(30, hits) : 1;
+      cells.forEach(k => { if (!hit.has(k)) score[k] += w; });
+    }
+    let best = -1, bestK = [];
+    avail.forEach(k => { if (score[k] > best) { best = score[k]; bestK = [k]; } else if (score[k] === best) bestK.push(k); });
+    return bestK[Math.floor(rand() * bestK.length)] ?? avail[0];
+  }
+
+  /* ---------- moteur ---------- */
+  function Engine(io) {
+    io = io || {};
+    const now = io.now || (() => Date.now());
+    const rand = io.rand || Math.random;
+    const changed = io.changed || (() => { });
+    let S, rate = {}, seen = {};
+    function code4() { const L = "ABCDEFGHJKLMNPQRSTUVWXYZ"; let s = ""; for (let i = 0; i < 4; i++) s += L[Math.floor(rand() * L.length)]; return s; }
+    function blank(keep, opts) {
+      const prev = S;
+      S = {
+        v: 1, room: keep && prev ? prev.room : code4(), phase: PH.LOBBY, gseq: 0, seq: 0, round: keep && prev ? prev.round : 0,
+        mode: (opts && opts.mode) || (prev && prev.mode) || "classic", quick: !!(opts ? opts.quick : prev && prev.quick), vsAI: !!(opts ? opts.vsAI : prev && prev.vsAI), aiLevel: (opts && opts.aiLevel) || (prev && prev.aiLevel) || "normal",
+        players: keep && prev ? prev.players.filter(p => !p.ai).map(p => fresh(p)) : [], nextId: keep && prev ? prev.nextId : 1,
+        turn: 0, starter: keep && prev ? prev.starter : -1, winner: null, reason: null, log: [], notes: {}, ev: { n: prev ? prev.ev.n + 1 : 1, t: "lobby" },
+        aiAt: 0, created: now(), lastAct: now(), launchReady: false
+      };
+      if (S.vsAI && !S.players.some(p => p.ai)) S.players.push(aiPlayer());
+    }
+    function fresh(p) { return { tok: p.tok, id: p.id, name: p.name, avatar: p.avatar, ai: !!p.ai, ready: false, fleet: null, shots: {}, stats: { shots: 0, hits: 0, sunk: 0 } }; }
+    function aiPlayer() { return { tok: "AI", id: "ai", name: "AMIRAL IA", avatar: "radar", ai: true, ready: false, fleet: null, shots: {}, stats: { shots: 0, hits: 0, sunk: 0 } }; }
+    blank(false);
+
+    const P = tok => S.players.find(p => p.tok === tok);
+    const idx = p => S.players.indexOf(p);
+    const opp = i => S.players[1 - i];
+    const ev = (t, x) => { S.ev = Object.assign({}, x || {}, { n: S.ev.n + 1, t }); };
+    function note(tok, aid, ok, msg) {
+      if (!tok) return; const ks = Object.keys(S.notes); if (ks.length > 30) ks.forEach(k => { if (!P(k)) delete S.notes[k]; });
+      S.notes[tok] = { aid: aid == null ? null : String(aid).slice(0, 24), ok, msg: msg || "" };
+    }
+    const done = () => { S.seq++; changed(); };
+    function limited(tok) {
+      if (!rate[tok] && Object.keys(rate).length > 100) rate = {};
+      const t = now(), r = (rate[tok] = (rate[tok] || []).filter(x => t - x < LIMITS.actWindowMs)); r.push(t); return r.length > LIMITS.actBurst;
+    }
+    const alive = p => p.fleet ? p.fleet.filter(s => !isSunk(p, s)).length : SHIPS.length;
+    function isSunk(owner, ship) { const o = opp(idx(owner)); return !!o && ship.cells.every(([r, c]) => o.shots[key(r, c)]); }
+    function shotsAllowed(i) { return S.mode === "salvo" ? Math.max(1, alive(S.players[i])) : 1; }
+
+    /* ======== actions des téléphones ======== */
+    function act(a) {
+      if (!a || typeof a !== "object") return { ok: false, err: "Action illisible." };
+      const tok = a.tok;
+      if (typeof tok !== "string" || !TOKEN_RE.test(tok)) return { ok: false, err: "Jeton invalide." };
+      if (limited(tok)) return { ok: false, err: "Trop d'actions." };
+      const fail = m => { note(tok, a.aid, false, m); done(); return { ok: false, err: m }; };
+      if (a.room !== S.room) return fail("Ce salon n'existe plus. Scanne le nouveau QR code.");
+      S.lastAct = now();
+      const p = P(tok);
+      if (a.t === "join") return join(a, p, fail);
+      if (!p) return fail("Tu ne fais pas partie de cette partie.");
+      const h = H[a.t]; if (!h) return fail("Action inconnue.");
+      return h(a, p, fail);
+    }
+    function join(a, p, fail) {
+      const c = cleanName(a.name); if (!c.ok) return fail(c.err);
+      const av = AVATARS.includes(a.avatar) ? a.avatar : AVATARS[0];
+      if (S.players.some(q => q !== p && nameKey(q.name) === nameKey(c.name))) return fail("Ce pseudo est déjà pris.");
+      if (p) { if (S.phase !== PH.LOBBY && S.phase !== PH.GAME_OVER) return fail("Le pseudo ne peut plus changer pendant la partie."); p.name = c.name; p.avatar = av; note(p.tok, a.aid, true, "Profil enregistré."); ev("profile"); done(); return { ok: true }; }
+      if (S.phase !== PH.LOBBY) return fail("La partie a déjà commencé.");
+      const humans = S.players.filter(q => !q.ai).length;
+      if (humans >= (S.vsAI ? 1 : 2)) return fail(S.vsAI ? "Partie contre l'IA : un seul joueur." : "Salon complet (2 joueurs).");
+      const np = fresh({ tok: a.tok, id: "p" + S.nextId++, name: c.name, avatar: av });
+      if (S.vsAI) S.players.splice(S.players.length - 1, 0, np); else S.players.push(np);
+      note(a.tok, a.aid, true, "Bienvenue à bord, " + c.name + " !");
+      ev("join", { name: c.name }); done(); return { ok: true };
+    }
+    const H = {
+      rename(a, p, fail) { return join(a, p, fail); },
+      leave(a, p, fail) {
+        if (S.phase !== PH.LOBBY) return fail("Pour quitter pendant la partie, utilise « Abandonner ».");
+        S.players = S.players.filter(q => q !== p); note(p.tok, a.aid, true, "Tu as quitté le salon."); ev("leave", { name: p.name }); done(); return { ok: true };
+      },
+      place(a, p, fail) {
+        if (S.phase !== PH.PLACEMENT) return fail("Ce n'est pas la phase de placement.");
+        const b = buildFleet(a.fleet); if (!b.ok) return fail(b.err);
+        p.fleet = b.fleet; p.ready = true; note(p.tok, a.aid, true, "Flotte en position !");
+        ev("ready", { name: p.name }); checkLaunch(); done(); return { ok: true };
+      },
+      unready(a, p, fail) {
+        if (S.phase !== PH.PLACEMENT) return fail("Trop tard pour modifier.");
+        p.ready = false; S.launchReady = false; note(p.tok, a.aid, true, ""); ev("unready", { name: p.name }); done(); return { ok: true };
+      },
+      launch(a, p, fail) {
+        if (S.phase !== PH.PLACEMENT || !S.launchReady) return fail("Les flottes ne sont pas toutes prêtes.");
+        if (idx(p) !== 0) return fail("C'est le capitaine 1 ou la télé qui lance le combat.");
+        launch(); note(p.tok, a.aid, true, ""); done(); return { ok: true };
+      },
+      shoot(a, p, fail) {
+        if (S.phase !== PH.BATTLE) return fail("Le combat n'a pas commencé.");
+        const i = idx(p);
+        if (S.turn !== i) return fail("Ce n'est pas ton tour.");
+        if (a.gseq !== S.gseq) return fail("La situation a changé : vérifie ta cible.");
+        const cells = Array.isArray(a.cells) ? a.cells : [];
+        const need = shotsAllowed(i);
+        if (cells.length !== need) return fail(need === 1 ? "Choisis une case." : "Choisis " + need + " cases (une par navire encore à flot).");
+        const ks = new Set();
+        for (const c of cells) {
+          if (!Array.isArray(c) || !Number.isInteger(c[0]) || !Number.isInteger(c[1]) || c[0] < 0 || c[1] < 0 || c[0] >= N || c[1] >= N) return fail("Case hors de la grille.");
+          const k = key(c[0], c[1]);
+          if (p.shots[k]) return fail(label(c[0], c[1]) + " a déjà été visée.");
+          if (ks.has(k)) return fail("Même case choisie deux fois.");
+          ks.add(k);
+        }
+        fire(i, cells);
+        note(p.tok, a.aid, true, "");
+        done(); return { ok: true };
+      },
+      forfeit(a, p, fail) {
+        if (S.phase !== PH.BATTLE && S.phase !== PH.PLACEMENT) return fail("Rien à abandonner.");
+        end(1 - idx(p), "abandon"); note(p.tok, a.aid, true, "Tu as abandonné."); done(); return { ok: true };
+      },
+      rematch(a, p, fail) {
+        if (S.phase !== PH.GAME_OVER) return fail("La partie n'est pas terminée.");
+        note(p.tok, a.aid, true, ""); host.replay(); return { ok: true };
+      }
+    };
+    function checkLaunch() {
+      S.launchReady = S.players.length === 2 && S.players.every(q => q.ready);
+      if (S.launchReady) ev("allReady");
+    }
+    function launch() {
+      S.phase = PH.BATTLE; S.gseq++;
+      S.starter = S.starter < 0 ? (rand() < 0.5 ? 0 : 1) : 1 - S.starter;
+      S.turn = S.starter; S.round++; S.log = [];
+      ev("battle", { turn: S.turn });
+      scheduleAI();
+    }
+    function fire(i, cells) {
+      const p = S.players[i], o = opp(i), res = [];
+      const sunkBefore = new Set(o.fleet.filter(s => isSunk(o, s)).map(s => s.type));
+      for (const [r, c] of cells) {
+        const ship = o.fleet.find(s => s.cells.some(([rr, cc]) => rr === r && cc === c));
+        p.shots[key(r, c)] = { res: ship ? "hit" : "miss", type: ship ? ship.type : null };
+        p.stats.shots++; if (ship) p.stats.hits++;
+        res.push({ r, c, res: ship ? "hit" : "miss" });
+      }
+      const sunkNow = o.fleet.filter(s => isSunk(o, s) && !sunkBefore.has(s.type));
+      sunkNow.forEach(s => { s.cells.forEach(([r, c]) => { p.shots[key(r, c)].res = "sunk"; }); p.stats.sunk++; res.forEach(x => { if (s.cells.some(([r, c]) => r === x.r && c === x.c)) { x.res = "sunk"; x.ship = s.type; } }); });
+      S.log.push({ by: i, cells: res.map(x => ({ r: x.r, c: x.c, res: x.res })), sunk: sunkNow.map(s => s.type) });
+      if (S.log.length > 60) S.log.shift();
+      S.gseq++;
+      const won = o.fleet.every(s => isSunk(o, s));
+      ev("shot", { by: i, cells: res, sunk: sunkNow.map(s => s.type), win: won });
+      if (won) return end(i, "fleet");
+      S.turn = 1 - i;
+      scheduleAI();
+    }
+    function scheduleAI() { const cur = S.players[S.turn]; S.aiAt = cur && cur.ai && S.phase === PH.BATTLE ? now() + (S.mode === "salvo" ? LIMITS.aiSalvoDelayMs : LIMITS.aiDelayMs) : 0; }
+    function end(winner, reason) {
+      S.phase = PH.GAME_OVER; S.winner = winner; S.reason = reason; S.gseq++; S.aiAt = 0;
+      ev("gameOver", { winner, reason });
+    }
+    function tick() {
+      const t = now();
+      if (S.phase === PH.BATTLE && S.aiAt && t >= S.aiAt) {
+        const i = S.turn, p = S.players[i], o = opp(i);
+        const sunkTypes = o.fleet.filter(s => isSunk(o, s)).map(s => s.type);
+        const cells = aiChoose(S.aiLevel, p.shots, sunkTypes, rand, shotsAllowed(i));
+        S.aiAt = 0; fire(i, cells); done(); return true;
+      }
+      if (S.phase === PH.LOBBY && S.players.some(p => !p.ai) && t - S.lastAct > LIMITS.lobbyIdleMs) { blank(false, { mode: S.mode, vsAI: S.vsAI, aiLevel: S.aiLevel }); ev("expired"); done(); return true; }
+      return false;
+    }
+    const host = {
+      create(opts) { blank(false, Object.assign({ mode: "classic", vsAI: false, aiLevel: "normal" }, opts || {})); ev("created"); done(); return { ok: true }; },
+      configure(opts) {
+        if (S.phase !== PH.LOBBY) return { ok: false, err: "Pas maintenant." };
+        if (opts.mode === "classic" || opts.mode === "salvo") S.mode = opts.mode;
+        if (["facile", "normal", "difficile"].includes(opts.aiLevel)) S.aiLevel = opts.aiLevel;
+        if (typeof opts.quick === "boolean") S.quick = opts.quick;
+        done(); return { ok: true };
+      },
+      start() {
+        if (S.phase !== PH.LOBBY) return { ok: false, err: "Déjà lancé." };
+        if (S.players.length !== 2) return { ok: false, err: S.vsAI ? "Il faut un joueur." : "Il faut 2 joueurs." };
+        S.phase = PH.PLACEMENT; S.gseq++; S.launchReady = false;
+        S.players.forEach(p => { p.ready = false; p.fleet = null; p.shots = {}; p.stats = { shots: 0, hits: 0, sunk: 0 }; });
+        S.players.filter(p => p.ai || S.quick).forEach(p => { p.fleet = buildFleet(autoPlace(rand)).fleet; p.ready = true; });
+        if (S.quick) { S.launchReady = true; launch(); } else ev("placement");
+        done(); return { ok: true };
+      },
+      launch() { if (S.phase !== PH.PLACEMENT || !S.launchReady) return { ok: false, err: "Flottes pas prêtes." }; launch(); done(); return { ok: true }; },
+      replay() {
+        if (S.phase !== PH.GAME_OVER) return { ok: false, err: "Pas maintenant." };
+        S.phase = PH.LOBBY; S.winner = null; S.reason = null;
+        const r = host.start(); return r;
+      },
+      newGame() { blank(true); ev("lobby"); done(); return { ok: true }; },
+      kick(id) { const p = S.players.find(q => q.id === id && !q.ai); if (!p || S.phase !== PH.LOBBY) return { ok: false, err: "Impossible." }; S.players = S.players.filter(q => q !== p); ev("leave"); done(); return { ok: true }; },
+      forfeitFor(id) { const p = S.players.find(q => q.id === id); if (!p || (S.phase !== PH.BATTLE && S.phase !== PH.PLACEMENT)) return { ok: false, err: "Impossible." }; end(1 - idx(p), "abandon"); done(); return { ok: true }; }
+    };
+    function setSeen(m) { seen = m && typeof m === "object" ? m : {}; }
+    const online = p => p.ai || (seen[p.tok] !== undefined && seen[p.tok] < 12000);
+
+    /* ======== vues ======== */
+    function board(i) {                      // ce que la télé et tout le monde voient des eaux du joueur i
+      const p = S.players[i], o = opp(i), over = S.phase === PH.GAME_OVER;
+      const shots = o ? Object.entries(o.shots).map(([k, v]) => ({ r: +k / N | 0, c: +k % N, res: v.res })) : [];
+      const fleet = p.fleet ? p.fleet.map(s => { const sunk = o ? isSunk(p, s) : false; return { type: s.type, sunk, cells: sunk || over ? s.cells : null }; }) : null;
+      return { shots, fleet };
+    }
+    function pubView() {
+      return {
+        room: S.room, phase: S.phase, gseq: S.gseq, mode: S.mode, quick: S.quick, vsAI: S.vsAI, aiLevel: S.aiLevel, round: S.round,
+        players: S.players.map((p, i) => ({ id: p.id, n: p.name, av: p.avatar, ai: p.ai, ready: p.ready, on: online(p), alive: alive(p), stats: p.stats, board: S.phase === PH.LOBBY ? null : board(i) })),
+        turn: S.turn, need: S.phase === PH.BATTLE ? shotsAllowed(S.turn) : 0, launchReady: S.launchReady, winner: S.winner, reason: S.reason,
+        log: S.log.slice(-8), ev: S.ev
+      };
+    }
+    function privView(p) {
+      const i = idx(p);
+      return { id: p.id, i, room: S.room, note: S.notes[p.tok] || null, fleet: p.fleet ? p.fleet.map(s => ({ type: s.type, r: s.r, c: s.c, dir: s.dir })) : null,
+        myShots: Object.entries(p.shots).map(([k, v]) => ({ r: +k / N | 0, c: +k % N, res: v.res })) };
+    }
+    function view() {
+      const pub = pubView(), priv = {};
+      S.players.forEach(p => { if (!p.ai) priv[p.tok] = privView(p); });
+      Object.keys(S.notes).forEach(t => { if (!priv[t]) priv[t] = { id: null, room: S.room, note: S.notes[t] }; });
+      return { pub, priv };
+    }
+    function serialize() { return JSON.stringify(S); }
+    function restore(json) {
+      try {
+        const o = typeof json === "string" ? JSON.parse(json) : json;
+        if (!o || o.v !== 1 || !PH[o.phase] || !Array.isArray(o.players)) return false;
+        if (now() - (o.lastAct || 0) > LIMITS.saveMaxAgeMs) return false;
+        for (const p of o.players) if (p.fleet && !buildFleet(p.fleet.map(s => ({ type: s.type, r: s.r, c: s.c, dir: s.dir }))).ok) return false;
+        S = o; if (S.aiAt) S.aiAt = now() + 1500; ev("restored"); changed(); return true;
+      } catch (e) { return false; }
+    }
+    return { act, tick, view, host, setSeen, serialize, restore, state: () => S };
+  }
+
+  return { Engine, N, COLS, SHIPS, SHIP, PH, AVATARS, LIMITS, TOKEN_RE, label, buildFleet, autoPlace, aiChoose, cleanName, rng };
+});

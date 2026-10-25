@@ -79,6 +79,7 @@ class Server extends Thread {
         this.assets = assets;
         channels.put("lg", new Channel(4096));
         channels.put("mm", new Channel(2048));
+        channels.put("bn", new Channel(1024));
         socket = new ServerSocket();
         socket.setReuseAddress(true);
         socket.bind(new InetSocketAddress(port));
@@ -340,6 +341,12 @@ class Server extends Thread {
                     break;
                 case "/mm-engine.js":
                     send(out, 200, "application/javascript; charset=utf-8", asset("mm-engine.txt"));
+                    break;
+                case "/bataille":
+                    send(out, 200, "text/html; charset=utf-8", asset("bataille.html"));
+                    break;
+                case "/bn-engine.js":
+                    send(out, 200, "application/javascript; charset=utf-8", asset("bn-engine.txt"));
                     break;
                 default:
                     send(out, 404, "text/plain", bytes("not found"));
