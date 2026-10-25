@@ -1,0 +1,870 @@
+/* IMPACT ARENA — moteur de combat (simulation déterministe à 60 pas par seconde).
+   Aucun rendu ici : personnages, squelettes articulés, coups, collisions, prises, finitions, manches et IA.
+   Les zones de coup sont calculées à partir de la position réelle des membres (cinématique directe du squelette). */
+(function (root, factory) {
+  const M = factory();
+  if (typeof module === "object" && module.exports) module.exports = M; else root.IA = M;
+})(typeof self !== "undefined" ? self : this, function () {
+  "use strict";
+
+  /* ======================= Constantes ======================= */
+  const W = 1920, H = 1080, GROUND = 930, LEFT = 190, RIGHT = 1730, FPS = 60;
+  const B = { P: 1, K: 2, H: 4, G: 8, D: 16, T: 32, S: 64 };
+  const BUFFER = 8;              // mémoire d'appui (images)
+  const GRAVITY = 1.05;
+
+  /* ======================= Personnages ======================= */
+  const CHARS = {
+    titan: {
+      id: "titan", name: "TITAN", title: "Le poids lourd", style: "Puissance et résistance",
+      bio: "Ancien docker devenu légende des combats clandestins. Chaque coup est un séisme.",
+      scale: 1.16, thick: 1.55, speed: 0.83, jump: 0.88, dmg: 1.3, taken: 0.78, heavyTaken: 0.78, regen: 0.9, weight: 1.45,
+      heavySU: 2, lightSU: 1, grabRange: 1.1, throwDmg: 1.15,
+      stats: { puissance: 5, vitesse: 2, defense: 5, technique: 2, prises: 4 },
+      colors: { skin: "#c98a5c", skin2: "#8f5a37", main: "#141414", trim: "#e2412b", glove: "#2a2a2a", wrap: "#e8e1d4", hair: "#1b1410", accent: "#ff6a1f" },
+      look: { hair: "bald", beard: true, mask: false, tattoo: "tribal" },
+      special: { name: "Bélier", desc: "Charge d'épaule qui encaisse les coups légers et renverse l'adversaire." },
+      finisher: { name: "Chute du Colosse", desc: "Soulève l'adversaire à bout de bras puis le plaque au sol." }
+    },
+    volt: {
+      id: "volt", name: "VOLT", title: "Le combattant explosif", style: "Vitesse et pression",
+      bio: "Prodige du muay-thaï urbain. Il frappe avant que vous ne l'ayez vu bouger.",
+      scale: 0.98, thick: 1.0, speed: 1.28, jump: 1.12, dmg: 0.93, taken: 1.06, heavyTaken: 1.25, regen: 1.4, weight: 0.85,
+      heavySU: 0, lightSU: -1, grabRange: 1.0, throwDmg: 0.9,
+      stats: { puissance: 2, vitesse: 5, defense: 2, technique: 4, prises: 2 },
+      colors: { skin: "#e2b088", skin2: "#a87454", main: "#ff7417", trim: "#25e0ff", glove: "#ffd21f", wrap: "#ffffff", hair: "#f6e9c8", accent: "#25e0ff" },
+      look: { hair: "mohawk", beard: false, mask: false, tattoo: "bolt" },
+      special: { name: "Éclair", desc: "Genou sauté foudroyant qui traverse la distance." },
+      finisher: { name: "Tempête", desc: "Rafale de poings conclue par un coup de pied retourné." }
+    },
+    phantom: {
+      id: "phantom", name: "PHANTOM", title: "Le technicien", style: "Précision et contre-attaque",
+      bio: "Maître silencieux des arts du contre. Il lit vos intentions dans vos épaules.",
+      scale: 1.02, thick: 1.05, speed: 1.02, jump: 1.0, dmg: 0.93, taken: 1.0, heavyTaken: 1.0, regen: 1.05, weight: 1.0,
+      heavySU: 0, lightSU: 0, grabRange: 1.0, throwDmg: 1.0, counterWin: 18, blockCost: 0.7,
+      stats: { puissance: 3, vitesse: 4, defense: 4, technique: 5, prises: 3 },
+      colors: { skin: "#8a5636", skin2: "#5a3420", main: "#272c34", trim: "#3fe3ff", glove: "#111418", wrap: "#3fe3ff", hair: "#0d0d10", accent: "#3fe3ff" },
+      look: { hair: "tail", beard: false, mask: "lower", tattoo: "none" },
+      special: { name: "Reflet", desc: "Posture de parade : le prochain coup reçu est renvoyé aussitôt." },
+      finisher: { name: "Verrou", desc: "Projection par-dessus l'épaule puis immobilisation au sol." }
+    },
+    atlas: {
+      id: "atlas", name: "ATLAS", title: "Le spécialiste des prises", style: "Catch, saisies et contrôle",
+      bio: "Champion masqué des rings de catch. Ce qu'il attrape ne touche plus terre… jusqu'à l'impact.",
+      scale: 1.1, thick: 1.42, speed: 0.84, jump: 0.92, dmg: 1.05, taken: 0.9, heavyTaken: 0.9, regen: 0.95, weight: 1.3,
+      heavySU: 2, lightSU: 0, grabRange: 1.32, throwDmg: 1.25,
+      stats: { puissance: 4, vitesse: 2, defense: 4, technique: 3, prises: 5 },
+      colors: { skin: "#b6774c", skin2: "#7e4c2c", main: "#5a2584", trim: "#ff8a1f", glove: "#ff8a1f", wrap: "#f4f0e8", hair: "#24160e", accent: "#ff8a1f" },
+      look: { hair: "short", beard: false, mask: "full", tattoo: "none" },
+      special: { name: "Tornade", desc: "Saisie à longue portée suivie d'un tourbillon et d'un plaquage." },
+      finisher: { name: "Orbite Atlas", desc: "Hisse l'adversaire sur ses épaules, tourne trois fois et s'écrase avec lui." }
+    }
+  };
+  const ROSTER = ["titan", "volt", "phantom", "atlas"];
+  /* proportions de base (pixels de l'écran de référence 1920×1080) */
+  const BONES = { torso: 150, head: 33, ua: 76, fa: 72, th: 98, sh: 98 };
+  function dims(c) {
+    const s = c.scale;
+    return { torso: BONES.torso * s, head: BONES.head * (0.9 + 0.1 * s), ua: BONES.ua * s, fa: BONES.fa * s, th: BONES.th * s, sh: BONES.sh * s,
+      thick: c.thick, half: 46 * s * (0.75 + 0.25 * c.thick) };
+  }
+
+  /* ======================= Poses (degrés) =======================
+     Angles absolus dans le repère du combattant tourné vers la droite : 0 = vers le bas, 90 = vers l'avant, 180 = vers le haut.
+     a/e = bras avant (épaule, coude relatif), b/f = bras arrière ; t/k = jambe avant (hanche, genou relatif), u/v = jambe arrière.
+     lean = inclinaison du buste vers l'avant, hd = tête, rot = rotation du corps entier (90 = sur le dos). */
+  const P0 = { lean: 10, hd: -6, a: 35, e: 115, b: 10, f: 140, t: 22, k: -26, u: -18, v: -6, rot: 0 };
+  const POSES = {
+    guard: P0,
+    guard2: Object.assign({}, P0, { lean: 13, a: 38, b: 13, hd: -3 }),
+    walkA: Object.assign({}, P0, { t: 36, k: -22, u: -28, v: -14 }),
+    walkB: Object.assign({}, P0, { t: 12, k: -40, u: -6, v: -4 }),
+    walkC: Object.assign({}, P0, { t: 6, k: -10, u: -34, v: -40 }),
+    crouch: { lean: 24, hd: -2, a: 45, e: 105, b: 25, f: 125, t: 80, k: -130, u: 16, v: -118, rot: 0 },
+    jump: { lean: 6, hd: -4, a: 52, e: 100, b: 30, f: 120, t: 72, k: -112, u: 22, v: -100, rot: 0 },
+    fall: { lean: 2, hd: -4, a: 60, e: 80, b: 40, f: 90, t: 30, k: -40, u: -10, v: -30, rot: 0 },
+    block: { lean: 2, hd: -14, a: 62, e: 114, b: 46, f: 124, t: 27, k: -32, u: -23, v: -8, rot: 0 },
+    cblock: { lean: 18, hd: -10, a: 64, e: 112, b: 50, f: 120, t: 80, k: -130, u: 16, v: -118, rot: 0 },
+    hitHigh: { lean: -24, hd: -30, a: 8, e: 70, b: -16, f: 80, t: 14, k: -10, u: -28, v: -6, rot: 0 },
+    hitBody: { lean: 40, hd: 18, a: 18, e: 92, b: 32, f: 80, t: 22, k: -32, u: -12, v: -16, rot: 0 },
+    hitLow: { lean: 26, hd: 6, a: 30, e: 90, b: 20, f: 100, t: 40, k: -60, u: -14, v: -10, rot: 0 },
+    stagger: { lean: -16, hd: -20, a: -12, e: 24, b: -34, f: 20, t: 18, k: -16, u: -30, v: -8, rot: 0 },
+    down: { lean: 0, hd: 6, a: -30, e: 20, b: -10, f: 30, t: 6, k: -18, u: -4, v: -8, rot: 90 },
+    downFace: { lean: 0, hd: -10, a: 160, e: 0, b: 170, f: 10, t: 4, k: -6, u: -8, v: -4, rot: -90 },
+    getup: { lean: 44, hd: 4, a: 55, e: 70, b: 30, f: 90, t: 82, k: -134, u: 14, v: -116, rot: 0 },
+    grabReach: { lean: 24, hd: -2, a: 82, e: 14, b: 74, f: 24, t: 32, k: -30, u: -24, v: -8, rot: 0 },
+    grabHold: { lean: 16, hd: -4, a: 70, e: 42, b: 66, f: 52, t: 26, k: -28, u: -22, v: -8, rot: 0 },
+    grabbed: { lean: 16, hd: 12, a: 20, e: 46, b: 8, f: 42, t: 20, k: -20, u: -16, v: -10, rot: 0 },
+    victory: { lean: -4, hd: -12, a: 168, e: 8, b: 150, f: 34, t: 14, k: -6, u: -14, v: -4, rot: 0 },
+    victory2: { lean: 8, hd: 6, a: 120, e: 80, b: 60, f: 120, t: 20, k: -20, u: -18, v: -6, rot: 0 },
+    dodgeSide: { lean: -8, hd: -6, a: 42, e: 115, b: 16, f: 135, t: 38, k: -42, u: -32, v: -14, rot: 0 },
+    dodgeBack: { lean: -20, hd: -6, a: 30, e: 120, b: 6, f: 140, t: 30, k: -10, u: -24, v: -32, rot: 0 },
+    kneel: { lean: 30, hd: 4, a: 80, e: 30, b: 70, f: 40, t: 86, k: -96, u: 0, v: -90, rot: 0 },
+    /* frappes : préparation (…C) et extension (…S) */
+    jabC: { lean: 12, hd: -6, a: 50, e: 96, b: 12, f: 140, t: 24, k: -26, u: -20, v: -6, rot: 0 },
+    jabS: { lean: 20, hd: -4, a: 89, e: 3, b: 14, f: 142, t: 28, k: -26, u: -26, v: -4, rot: 0 },
+    hookC: { lean: 4, hd: -6, a: 66, e: 44, b: 14, f: 140, t: 22, k: -26, u: -20, v: -6, rot: 0 },
+    hookS: { lean: 24, hd: -4, a: 100, e: 66, b: 18, f: 138, t: 30, k: -30, u: -26, v: -4, rot: 0 },
+    crossC: { lean: -4, hd: -8, a: 40, e: 112, b: -12, f: 126, t: 22, k: -24, u: -22, v: -8, rot: 0 },
+    crossS: { lean: 28, hd: -4, a: 26, e: 126, b: 92, f: 2, t: 32, k: -32, u: -34, v: 4, rot: 0 },
+    kickC: { lean: -6, hd: -6, a: 40, e: 108, b: 0, f: 120, t: 96, k: -126, u: -10, v: -4, rot: 0 },
+    kickS: { lean: -16, hd: -4, a: 44, e: 100, b: -24, f: 100, t: 93, k: -6, u: -8, v: -2, rot: 0 },
+    roundC: { lean: -10, hd: -6, a: 46, e: 100, b: -10, f: 110, t: 112, k: -122, u: -12, v: -2, rot: 0 },
+    roundS: { lean: -28, hd: -2, a: 60, e: 90, b: -40, f: 90, t: 122, k: -8, u: -10, v: 0, rot: 0 },
+    lowjabC: { lean: 26, hd: -2, a: 62, e: 80, b: 25, f: 125, t: 80, k: -130, u: 16, v: -118, rot: 0 },
+    lowjabS: { lean: 32, hd: 0, a: 84, e: 6, b: 25, f: 125, t: 80, k: -130, u: 16, v: -118, rot: 0 },
+    sweepC: { lean: 30, hd: 0, a: 50, e: 100, b: 30, f: 110, t: 64, k: -60, u: 16, v: -118, rot: 0 },
+    sweepS: { lean: 34, hd: 2, a: 40, e: 90, b: 40, f: 100, t: 88, k: -2, u: 14, v: -120, rot: 0 },
+    upperC: { lean: 26, hd: -2, a: 50, e: 100, b: 22, f: 150, t: 76, k: -124, u: 16, v: -110, rot: 0 },
+    upperS: { lean: 8, hd: -14, a: 40, e: 110, b: 152, f: 28, t: 22, k: -22, u: -20, v: -6, rot: 0 },
+    airkS: { lean: -4, hd: -4, a: 52, e: 96, b: 20, f: 110, t: 56, k: -8, u: -12, v: -70, rot: 0 },
+    airpS: { lean: 18, hd: 0, a: 66, e: 6, b: 30, f: 120, t: 60, k: -100, u: 20, v: -90, rot: 0 },
+    counterS: { lean: 32, hd: -2, a: 28, e: 124, b: 96, f: 0, t: 34, k: -34, u: -36, v: 4, rot: 0 },
+    elbowS: { lean: 30, hd: -2, a: 96, e: 150, b: 20, f: 130, t: 30, k: -30, u: -28, v: -4, rot: 0 },
+    /* techniques spéciales */
+    chargeC: { lean: 34, hd: 8, a: 36, e: 70, b: 10, f: 120, t: 40, k: -50, u: -24, v: -20, rot: 0 },
+    chargeS: { lean: 48, hd: 10, a: 74, e: 54, b: 20, f: 110, t: 46, k: -40, u: -46, v: -10, rot: 0 },
+    kneeC: { lean: 10, hd: -4, a: 60, e: 90, b: 20, f: 120, t: 64, k: -112, u: -10, v: -30, rot: 0 },
+    kneeS: { lean: -12, hd: -6, a: 120, e: 40, b: 100, f: 60, t: 104, k: -152, u: -8, v: -40, rot: 0 },
+    parry: { lean: 0, hd: -8, a: 112, e: 58, b: 72, f: 96, t: 28, k: -30, u: -24, v: -8, rot: 0 },
+    palmS: { lean: 34, hd: -2, a: 94, e: 2, b: 20, f: 130, t: 36, k: -34, u: -34, v: 4, rot: 0 },
+    spinReach: { lean: 26, hd: -2, a: 104, e: 10, b: 96, f: 16, t: 36, k: -36, u: -26, v: -8, rot: 0 },
+    liftUp: { lean: -4, hd: -12, a: 172, e: 6, b: 168, f: 10, t: 22, k: -18, u: -22, v: -6, rot: 0 },
+    slamDown: { lean: 46, hd: 10, a: 96, e: 10, b: 92, f: 12, t: 70, k: -100, u: -20, v: -40, rot: 0 },
+    shoulders: { lean: 4, hd: -6, a: 150, e: 60, b: 140, f: 70, t: 22, k: -20, u: -20, v: -8, rot: 0 },
+    sitout: { lean: 10, hd: 0, a: 120, e: 20, b: 110, f: 30, t: 92, k: -10, u: 88, v: -8, rot: 0 },
+    spinKick: { lean: -30, hd: 4, a: 20, e: 60, b: -60, f: 60, t: 100, k: -4, u: -6, v: 0, rot: 0 },
+    bridge: { lean: -40, hd: -20, a: 200, e: 0, b: 200, f: 0, t: 40, k: -80, u: 20, v: -70, rot: 0 },
+    lifted: { lean: 0, hd: 10, a: 40, e: 30, b: 20, f: 40, t: 10, k: -20, u: -10, v: -10, rot: 0 }
+  };
+  const KEYS = ["lean", "hd", "a", "e", "b", "f", "t", "k", "u", "v", "rot"];
+  const ease = t => t * t * (3 - 2 * t);
+  function lerpPose(p, q, t) { const o = {}; for (const k of KEYS) o[k] = p[k] + (q[k] - p[k]) * t; return o; }
+  function anim(keys, fr) {           // keys = [[image, pose], …]
+    if (fr <= keys[0][0]) return keys[0][1];
+    for (let i = 1; i < keys.length; i++) if (fr <= keys[i][0]) {
+      const [f0, p] = keys[i - 1], [f1, q] = keys[i];
+      return lerpPose(p, q, ease((fr - f0) / Math.max(1, f1 - f0)));
+    }
+    return keys[keys.length - 1][1];
+  }
+  const P = n => POSES[n];
+
+  /* ======================= Cinématique directe =======================
+     Renvoie les articulations en coordonnées écran (y vers le bas). */
+  const dir = deg => { const r = deg * Math.PI / 180; return [Math.sin(r), -Math.cos(r)]; };
+  function fkLocal(d, p) {
+    const r = p.rot, J = {};
+    const add = (o, len, ang) => { const v = dir(ang); return [o[0] + v[0] * len, o[1] + v[1] * len]; };
+    J.pelvis = [0, 0];
+    const ta = 180 - p.lean + r;
+    J.neck = add(J.pelvis, d.torso, ta);
+    J.shoulder = add(J.pelvis, d.torso * 0.9, ta);
+    J.head = add(J.neck, d.head + 8, ta + p.hd);
+    J.elbow1 = add(J.shoulder, d.ua, p.a + r); J.fist1 = add(J.elbow1, d.fa, p.a + p.e + r);
+    J.elbow2 = add(J.shoulder, d.ua, p.b + r); J.fist2 = add(J.elbow2, d.fa, p.b + p.f + r);
+    J.knee1 = add(J.pelvis, d.th, p.t + r); J.foot1 = add(J.knee1, d.sh, p.t + p.k + r);
+    J.knee2 = add(J.pelvis, d.th, p.u + r); J.foot2 = add(J.knee2, d.sh, p.u + p.v + r);
+    // hauteur du bassin pour que le point le plus bas touche le sol
+    let low = Math.min(J.foot1[1], J.foot2[1], J.knee1[1], J.knee2[1], J.neck[1] - 14 * d.thick, J.pelvis[1] - 16 * d.thick, J.head[1] - d.head);
+    J.lift = -low;
+    return J;
+  }
+  function toWorld(J, x, h, facing, liftOverride) {
+    const lift = liftOverride != null ? liftOverride : J.lift, o = {};
+    for (const k in J) if (k !== "lift") o[k] = [x + facing * J[k][0], GROUND - h - lift - J[k][1]];
+    o.lift = lift;
+    return o;
+  }
+
+  /* ======================= Coups =======================
+     su = préparation, ac = fenêtre active, rc = récupération (images à 60 par seconde). */
+  const BASE_MOVES = {
+    jab: { kind: "strike", c: "jabC", s: "jabS", limb: "fist1", r: 26, su: 5, ac: 3, rc: 10, dmg: 5, hs: 16, bs: 11, push: 24, stam: 4, h: "high", chain: { P: "hook", K: "kick", H: "cross" }, light: true, label: "Direct" },
+    hook: { kind: "strike", c: "hookC", s: "hookS", limb: "fist1", r: 28, su: 6, ac: 3, rc: 13, dmg: 7, hs: 18, bs: 12, push: 30, stam: 6, h: "high", chain: { K: "round", H: "cross" }, light: true, label: "Crochet" },
+    cross: { kind: "strike", c: "crossC", s: "crossS", limb: "fist2", r: 30, su: 13, ac: 4, rc: 22, dmg: 14, hs: 24, bs: 16, push: 70, stam: 14, h: "mid", chain: {}, heavy: true, label: "Coup puissant" },
+    kick: { kind: "strike", c: "kickC", s: "kickS", limb: "foot1", r: 30, su: 9, ac: 4, rc: 16, dmg: 9, hs: 20, bs: 13, push: 52, stam: 8, h: "mid", chain: { H: "cross" }, label: "Coup de pied" },
+    stepkick: { kind: "strike", c: "kickC", s: "kickS", limb: "foot1", r: 30, su: 11, ac: 4, rc: 17, dmg: 10, hs: 20, bs: 13, push: 60, stam: 10, h: "mid", chain: { H: "cross" }, dash: 7, label: "Pied d'approche" },
+    round: { kind: "strike", c: "roundC", s: "roundS", limb: "foot1", r: 32, su: 9, ac: 4, rc: 20, dmg: 12, hs: 28, bs: 14, push: 130, stam: 10, h: "high", chain: {}, label: "Pied circulaire" },
+    lowjab: { kind: "strike", c: "lowjabC", s: "lowjabS", limb: "fist1", r: 26, su: 5, ac: 3, rc: 10, dmg: 4, hs: 14, bs: 10, push: 22, stam: 4, h: "low", chain: { P: "lowjab", K: "sweep" }, light: true, crouch: true, label: "Direct bas" },
+    sweep: { kind: "strike", c: "sweepC", s: "sweepS", limb: "foot1", r: 30, su: 10, ac: 4, rc: 22, dmg: 8, hs: 20, bs: 14, push: 30, stam: 9, h: "low", chain: {}, kd: true, crouch: true, label: "Balayage" },
+    upper: { kind: "strike", c: "upperC", s: "upperS", limb: "fist2", r: 30, su: 11, ac: 4, rc: 24, dmg: 13, hs: 26, bs: 16, push: 70, stam: 13, h: "mid", chain: {}, kd: true, antiair: true, heavy: true, label: "Uppercut" },
+    airk: { kind: "strike", c: "jump", s: "airkS", limb: "foot1", r: 30, su: 6, ac: 10, rc: 6, dmg: 9, hs: 20, bs: 12, push: 40, stam: 6, h: "over", chain: {}, air: true, label: "Pied sauté" },
+    airp: { kind: "strike", c: "jump", s: "airpS", limb: "fist1", r: 28, su: 5, ac: 6, rc: 6, dmg: 6, hs: 16, bs: 10, push: 30, stam: 4, h: "over", chain: {}, air: true, light: true, label: "Poing sauté" },
+    counter: { kind: "strike", c: "crossC", s: "counterS", limb: "fist2", r: 30, su: 3, ac: 3, rc: 12, dmg: 9, hs: 22, bs: 12, push: 60, stam: 2, h: "mid", chain: { K: "round" }, label: "Contre" },
+    grab: { kind: "grab", c: "grabReach", s: "grabReach", su: 6, ac: 3, rc: 22, range: 118, stam: 6, label: "Saisie" }
+  };
+  const SPECIALS = {
+    titan: { kind: "strike", c: "chargeC", s: "chargeS", limb: "shoulder", r: 46, su: 16, ac: 14, rc: 22, dmg: 18, hs: 30, bs: 20, push: 150, stam: 10, h: "mid", kd: true, dash: 13, armor: true, chain: {}, label: "Bélier" },
+    volt: { kind: "strike", c: "kneeC", s: "kneeS", limb: "knee1", r: 34, su: 8, ac: 8, rc: 18, dmg: 14, hs: 30, bs: 16, push: 120, stam: 8, h: "mid", kd: true, dash: 15, hop: 8, chain: {}, label: "Éclair" },
+    phantom: { kind: "parry", c: "parry", s: "parry", su: 3, ac: 30, rc: 20, dmg: 16, stam: 6, label: "Reflet" },
+    atlas: { kind: "grab", c: "spinReach", s: "spinReach", su: 10, ac: 5, rc: 26, range: 168, stam: 8, throwDmg: 20, throwKind: "spin", label: "Tornade" }
+  };
+  function movesFor(c) {
+    const out = {};
+    const all = Object.assign({}, BASE_MOVES, { special: SPECIALS[c.id] });
+    for (const k in all) {
+      const m = Object.assign({}, all[k]);
+      if (m.kind === "strike") {
+        if (m.heavy || k === "special") m.su = Math.max(3, m.su + c.heavySU);
+        if (m.light) { m.su = Math.max(3, m.su + c.lightSU); m.rc = Math.max(6, m.rc + c.lightSU * 2); }
+        m.dmg = Math.round(m.dmg * c.dmg * 10) / 10;
+        m.r = m.r * (0.85 + 0.15 * c.scale);
+      }
+      if (m.kind === "grab") m.range = (m.range || 118) * c.grabRange * (0.9 + 0.1 * c.scale);
+      m.id = k;
+      out[k] = m;
+    }
+    return out;
+  }
+
+  /* ======================= Projections et finitions (séquences) =======================
+     Chaque clé : f = image, a = pose de l'attaquant, v = pose de la victime, dx/dh = position de la victime
+     (dx dans la direction où regarde l'attaquant), hits = dégâts appliqués à une image donnée. */
+  const SEQ = {
+    throwF: { len: 46, keys: [
+      { f: 0, a: "grabHold", v: "grabbed", dx: 74, dh: 0 },
+      { f: 12, a: { lean: 34, hd: -6, a: 126, e: 20, b: 116, f: 30, t: 30, k: -34, u: -30, v: -4, rot: 0 }, v: Object.assign({}, POSES.lifted, { rot: 40 }), dx: 56, dh: 130 },
+      { f: 22, a: { lean: 46, hd: 4, a: 70, e: 20, b: 60, f: 30, t: 34, k: -40, u: -30, v: -6, rot: 0 }, v: Object.assign({}, POSES.lifted, { rot: 100 }), dx: 140, dh: 50 },
+      { f: 27, a: { lean: 40, hd: 4, a: 60, e: 30, b: 50, f: 40, t: 34, k: -40, u: -30, v: -6, rot: 0 }, v: "down", dx: 168, dh: 0 },
+      { f: 46, a: "guard", v: "down", dx: 176, dh: 0 }], hits: [{ f: 27, dmg: 12, shake: 10 }] },
+    throwB: { len: 50, swap: true, keys: [
+      { f: 0, a: "grabHold", v: "grabbed", dx: 74, dh: 0 },
+      { f: 12, a: { lean: -6, hd: -10, a: 150, e: 10, b: 148, f: 12, t: 24, k: -24, u: -20, v: -8, rot: 0 }, v: Object.assign({}, POSES.lifted, { rot: -90 }), dx: 20, dh: 220 },
+      { f: 24, a: "bridge", v: Object.assign({}, POSES.lifted, { rot: -200 }), dx: -110, dh: 70 },
+      { f: 29, a: "bridge", v: Object.assign({}, POSES.down, { rot: -270 }), dx: -160, dh: 0 },
+      { f: 50, a: "guard", v: Object.assign({}, POSES.down, { rot: -270 }), dx: -160, dh: 0 }], hits: [{ f: 29, dmg: 13, shake: 12 }] },
+    throwSpin: { len: 70, keys: [
+      { f: 0, a: "spinReach", v: "grabbed", dx: 80, dh: 0 },
+      { f: 12, a: "shoulders", v: Object.assign({}, POSES.lifted, { rot: 90 }), dx: 0, dh: 240 },
+      { f: 46, a: "shoulders", v: Object.assign({}, POSES.lifted, { rot: 90 }), dx: 0, dh: 240, spin: 3 },
+      { f: 56, a: "slamDown", v: Object.assign({}, POSES.down), dx: 120, dh: 0 },
+      { f: 70, a: "guard", v: "down", dx: 130, dh: 0 }], hits: [{ f: 56, dmg: 20, shake: 18 }] },
+    fin_titan: { len: 110, keys: [
+      { f: 0, a: "guard", v: "hitHigh", dx: 90, dh: 0 },
+      { f: 12, a: "grabHold", v: "grabbed", dx: 70, dh: 0 },
+      { f: 34, a: "liftUp", v: Object.assign({}, POSES.lifted, { rot: 90 }), dx: 10, dh: 330 },
+      { f: 58, a: Object.assign({}, POSES.liftUp, { lean: -8 }), v: Object.assign({}, POSES.lifted, { rot: 96 }), dx: 6, dh: 350 },
+      { f: 68, a: "slamDown", v: Object.assign({}, POSES.down, { rot: 100 }), dx: 140, dh: 0 },
+      { f: 110, a: "guard", v: "down", dx: 150, dh: 0 }],
+      hits: [{ f: 68, dmg: 30, shake: 26, slow: 40 }] },
+    fin_volt: { len: 104, keys: [
+      { f: 0, a: "guard", v: "hitHigh", dx: 92, dh: 0 },
+      { f: 6, a: "jabS", v: "hitHigh", dx: 96, dh: 0 }, { f: 12, a: "crossS", v: "hitBody", dx: 102, dh: 0 },
+      { f: 18, a: "jabS", v: "hitHigh", dx: 108, dh: 0 }, { f: 24, a: "crossS", v: "hitBody", dx: 114, dh: 0 },
+      { f: 30, a: "hookS", v: "hitHigh", dx: 120, dh: 0 }, { f: 36, a: "crossS", v: "hitHigh", dx: 128, dh: 0 },
+      { f: 50, a: Object.assign({}, POSES.guard, { lean: -10 }), v: "stagger", dx: 140, dh: 0 },
+      { f: 62, a: "spinKick", v: "stagger", dx: 140, dh: 0, spin: 1 },
+      { f: 76, a: "spinKick", v: Object.assign({}, POSES.lifted, { rot: 80 }), dx: 340, dh: 130 },
+      { f: 88, a: "guard", v: "down", dx: 420, dh: 0 },
+      { f: 104, a: "guard", v: "down", dx: 430, dh: 0 }],
+      hits: [{ f: 6, dmg: 3, shake: 3 }, { f: 12, dmg: 3, shake: 3 }, { f: 18, dmg: 3, shake: 3 }, { f: 24, dmg: 3, shake: 3 }, { f: 30, dmg: 3, shake: 4 }, { f: 36, dmg: 3, shake: 4 }, { f: 63, dmg: 12, shake: 22, slow: 34 }] },
+    fin_phantom: { len: 112, keys: [
+      { f: 0, a: "grabReach", v: "hitHigh", dx: 80, dh: 0 },
+      { f: 10, a: "grabHold", v: "grabbed", dx: 66, dh: 0 },
+      { f: 22, a: { lean: 50, hd: 6, a: 120, e: 30, b: 110, f: 40, t: 50, k: -70, u: -20, v: -20, rot: 0 }, v: Object.assign({}, POSES.lifted, { rot: 120 }), dx: 20, dh: 200 },
+      { f: 32, a: "slamDown", v: Object.assign({}, POSES.down), dx: 130, dh: 0 },
+      { f: 46, a: "kneel", v: "down", dx: 110, dh: 0 },
+      { f: 112, a: "kneel", v: "down", dx: 110, dh: 0 }],
+      hits: [{ f: 32, dmg: 14, shake: 14 }, { f: 56, dmg: 4, shake: 5 }, { f: 70, dmg: 4, shake: 5 }, { f: 84, dmg: 4, shake: 5 }, { f: 96, dmg: 4, shake: 12, slow: 30 }] },
+    fin_atlas: { len: 128, keys: [
+      { f: 0, a: "spinReach", v: "hitHigh", dx: 84, dh: 0 },
+      { f: 12, a: "grabHold", v: "grabbed", dx: 66, dh: 0 },
+      { f: 28, a: "shoulders", v: Object.assign({}, POSES.lifted, { rot: 90 }), dx: 0, dh: 250 },
+      { f: 70, a: "shoulders", v: Object.assign({}, POSES.lifted, { rot: 90 }), dx: 0, dh: 250, spin: 3 },
+      { f: 80, a: Object.assign({}, POSES.shoulders, { t: 50, k: -90, u: 30, v: -80 }), v: Object.assign({}, POSES.lifted, { rot: 110 }), dx: 10, dh: 320, ah: 70 },
+      { f: 92, a: "sitout", v: Object.assign({}, POSES.down, { rot: 150 }), dx: 100, dh: 0, ah: 0 },
+      { f: 128, a: "guard", v: "down", dx: 120, dh: 0 }],
+      hits: [{ f: 92, dmg: 30, shake: 28, slow: 42 }] }
+  };
+
+  /* ======================= Hasard déterministe ======================= */
+  function rng(seed) { let s = (seed >>> 0) || 0x9e3779b9; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
+
+  /* ======================= Géométrie des collisions ======================= */
+  function segDist2(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
+    let t = l ? ((px - ax) * dx + (py - ay) * dy) / l : 0; t = Math.max(0, Math.min(1, t));
+    const x = ax + t * dx - px, y = ay + t * dy - py; return x * x + y * y;
+  }
+  function hurtShapes(f) {
+    const J = f.J, d = f.d, s = [];
+    s.push({ k: "head", a: J.head, b: J.head, r: d.head + 4 });
+    s.push({ k: "torso", a: J.pelvis, b: J.neck, r: 26 * d.thick });
+    s.push({ k: "leg", a: J.pelvis, b: J.knee1, r: 15 * d.thick }); s.push({ k: "leg", a: J.knee1, b: J.foot1, r: 12 * d.thick });
+    s.push({ k: "leg", a: J.pelvis, b: J.knee2, r: 15 * d.thick }); s.push({ k: "leg", a: J.knee2, b: J.foot2, r: 12 * d.thick });
+    s.push({ k: "arm", a: J.shoulder, b: J.elbow1, r: 11 * d.thick }); s.push({ k: "arm", a: J.shoulder, b: J.elbow2, r: 11 * d.thick });
+    return s;
+  }
+  /* zone de frappe = le segment terminal du membre qui frappe (avant-bras entier + poing, tibia + pied, cuisse + genou) */
+  const LIMB_BASE = { fist1: "elbow1", fist2: "elbow2", foot1: "knee1", foot2: "knee2", knee1: "pelvis", shoulder: "pelvis" };
+  function hitTest(att, def) {
+    const m = att.move, c = att.J[m.limb];
+    if (!c) return null;
+    const base = att.J[LIMB_BASE[m.limb]] || c, from = m.limb === "shoulder" ? 0.75 : m.limb.startsWith("fist") ? 0 : 0.25;
+    const shapes = hurtShapes(def);
+    let best = null, bestP = null;
+    for (let k = 0; k <= 4; k++) {
+      const t = 1 - (1 - from) * (k / 4), px = base[0] + (c[0] - base[0]) * t, py = base[1] + (c[1] - base[1]) * t;
+      for (const s of shapes) {
+        const rr = m.r + s.r;
+        if (segDist2(px, py, s.a[0], s.a[1], s.b[0], s.b[1]) <= rr * rr) { if (!best || s.k === "head") { best = s; bestP = [px, py]; } }
+      }
+      if (best) break;                     // le point le plus proche de l'extrémité qui touche
+    }
+    return best ? { x: bestP[0], y: bestP[1], zone: best.k } : null;
+  }
+
+  /* ======================= Combattant ======================= */
+  function Fighter(cid, side) {
+    const c = CHARS[cid];
+    return {
+      cid, c, side, d: dims(c), moves: movesFor(c),
+      x: side === 0 ? 700 : 1220, h: 0, vx: 0, vy: 0, facing: side === 0 ? 1 : -1,
+      hp: 100, stam: 100, sp: 0, st: "idle", fr: 0, move: null, hitDone: false, contact: false,
+      stun: 0, combo: 0, comboTaken: 0, scale: 1, buf: {}, held: 0, jx: 0, jy: 0, prevUp: false,
+      counterWin: 0, punishWin: 0, dodgeKind: "side", dodgeHit: false, inv: 0, armorUsed: false,
+      seq: null, seqFr: 0, seqRole: null, depth: 0, walkT: 0, idleT: 0, lastHitFr: 0,
+      stats: { hits: 0, combos: 0, maxCombo: 0, throws: 0, finishers: 0, blocks: 0, dodges: 0, dmg: 0, counters: 0, punishes: 0 },
+      pose: P0, J: null
+    };
+  }
+
+  /* ======================= Match ======================= */
+  const DEFAULTS = { roundTime: 90, rounds: 3, tie: "prolongation", overtime: 15, dmgScale: 1, training: false };
+
+  function Match(p1, p2, opts) {
+    opts = Object.assign({}, DEFAULTS, opts || {});
+    const R = rng(opts.seed || 12345);
+    const F = [Fighter(p1, 0), Fighter(p2, 1)];
+    const S = {
+      opts, F, tick: 0, phase: "intro", phaseFr: 0, round: 1, wins: [0, 0], timer: opts.roundTime * FPS,
+      hitstop: 0, shake: 0, slow: 0, events: [], winner: null, roundWinner: null, overtime: false, matchFr: 0,
+      roundLog: [], camera: { zoom: 1, x: W / 2 }
+    };
+    const E = (t, o) => S.events.push(Object.assign({ t, tick: S.tick }, o || {}));
+    const other = f => F[1 - f.side];
+    const grounded = f => f.h <= 0.01;
+    function resetRound() {
+      F.forEach((f, i) => {
+        Object.assign(f, { x: i === 0 ? 700 : 1220, h: 0, vx: 0, vy: 0, facing: i === 0 ? 1 : -1, hp: 100, stam: 100, st: "idle", fr: 0, move: null,
+          stun: 0, combo: 0, comboTaken: 0, buf: {}, counterWin: 0, punishWin: 0, inv: 0, seq: null, depth: 0, sp: Math.min(f.sp, 50) });
+      });
+      S.timer = opts.roundTime * FPS; S.overtime = false; S.phase = "intro"; S.phaseFr = 0; S.roundWinner = null;
+    }
+
+    /* ---- entrées ---- */
+    function readInput(f, inp) {
+      inp = inp || { x: 0, y: 0, b: 0, p: 0 };
+      const pressed = (inp.p || 0) | (inp.b & ~f.held);
+      f.held = inp.b || 0; f.jx = clamp(inp.x || 0, -1, 1); f.jy = clamp(inp.y || 0, -1, 1);
+      for (const k in B) { if (pressed & B[k]) f.buf[k] = BUFFER; else if (f.buf[k] > 0) f.buf[k]--; }
+    }
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const has = (f, k) => f.buf[k] > 0;
+    const use = (f, k) => { f.buf[k] = 0; };
+    const holding = (f, k) => (f.held & B[k]) !== 0;
+    const fwd = f => f.jx * f.facing > 0.35, back = f => f.jx * f.facing < -0.35;
+    const down = f => f.jy < -0.55, up = f => f.jy > 0.55;
+    const tired = f => f.stam < 15;
+
+    function start(f, st) { f.st = st; f.fr = 0; }
+    function startMove(f, id, extra) {
+      const m = Object.assign({}, f.moves[id], extra || {});
+      if (f.stam < m.stam * 0.5 && m.kind !== "parry") { E("tired", { side: f.side }); }
+      f.stam = Math.max(0, f.stam - m.stam);
+      f.move = m; f.hitDone = false; f.contact = false; f.armorUsed = false;
+      if (tired(f) && m.kind === "strike") m.su += 2;
+      start(f, m.kind === "grab" ? "grab" : m.kind === "parry" ? "parry" : "attack");
+      E("swing", { side: f.side, move: id, heavy: !!m.heavy });
+    }
+
+    const actionable = f => ["idle", "walk", "crouch", "block"].includes(f.st);
+
+    function think(f) {
+      const o = other(f);
+      // finition / spéciale
+      if (has(f, "S") && (actionable(f))) {
+        use(f, "S");
+        const dist = Math.abs(o.x - f.x);
+        if (f.sp >= 100 && dist <= 160 + f.d.half && grounded(o) && ["idle", "walk", "crouch", "block", "attack", "blockstun", "hitstun", "grab", "parry", "stagger"].includes(o.st) && o.st !== "dodge") {
+          return startFinisher(f, o);
+        }
+        if (f.sp >= 50) { f.sp -= 50; startMove(f, "special"); E("special", { side: f.side, name: f.moves.special.label }); return; }
+        E("nogauge", { side: f.side });
+      }
+      if (has(f, "T") && actionable(f)) { use(f, "T"); f.grabBack = back(f); return startMove(f, "grab"); }
+      if (has(f, "D") && actionable(f)) {
+        use(f, "D");
+        if (f.stam >= 10) { f.stam -= 16; f.dodgeKind = back(f) ? "back" : "side"; f.dodgeHit = false; start(f, "dodge"); E("dodge", { side: f.side, kind: f.dodgeKind }); f.stats.dodges++; return; }
+        E("tired", { side: f.side });
+      }
+      // contre après une garde réussie
+      if (f.counterWin > 0 && has(f, "P") && actionable(f)) { use(f, "P"); f.counterWin = 0; f.stats.counters++; startMove(f, "counter"); f.move.isCounter = true; E("counter", { side: f.side }); return; }
+      // punition après une esquive réussie
+      if (f.punishWin > 0 && has(f, "H") && (actionable(f) || (f.st === "dodge" && f.fr > 12))) {
+        use(f, "H"); f.punishWin = 0; startMove(f, "cross", { dmg: f.moves.cross.dmg * 1.5, kd: true, su: Math.max(6, f.moves.cross.su - 4), punish: true }); E("punishGo", { side: f.side }); return;
+      }
+      if (actionable(f)) {
+        const cr = down(f);
+        if (has(f, "P")) { use(f, "P"); return startMove(f, cr ? "lowjab" : "jab"); }
+        if (has(f, "K")) { use(f, "K"); return startMove(f, cr ? "sweep" : fwd(f) ? "stepkick" : "kick"); }
+        if (has(f, "H")) { use(f, "H"); return startMove(f, cr ? "upper" : "cross"); }
+        if (holding(f, "G")) { if (f.st !== "block") start(f, "block"); f.crouchBlock = cr; return; }
+        if (up(f) && !f.prevUp) {
+          f.vy = 21 * f.c.jump; f.h = 0.1; f.vx = (fwd(f) ? 6.2 : back(f) ? -5.2 : 0) * f.facing * (0.7 + 0.3 * f.c.speed);
+          start(f, "jump"); E("jump", { side: f.side }); return;
+        }
+        if (cr) { if (f.st !== "crouch") start(f, "crouch"); f.vx = 0; return; }
+        if (fwd(f) || back(f)) {
+          if (f.st !== "walk") start(f, "walk");
+          const sp = (fwd(f) ? 5.4 : -4.4) * f.c.speed * (tired(f) ? 0.75 : 1);
+          f.vx = sp * f.facing; return;
+        }
+        if (f.st !== "idle") start(f, "idle"); f.vx = 0;
+      }
+      if (f.st === "jump" && !f.move && grounded(f) === false) {
+        if (has(f, "K")) { use(f, "K"); f.move = Object.assign({}, f.moves.airk); f.fr = 0; f.hitDone = false; f.stam = Math.max(0, f.stam - f.move.stam); f.airAtk = true; E("swing", { side: f.side, move: "airk" }); }
+        else if (has(f, "P")) { use(f, "P"); f.move = Object.assign({}, f.moves.airp); f.fr = 0; f.hitDone = false; f.stam = Math.max(0, f.stam - f.move.stam); f.airAtk = true; E("swing", { side: f.side, move: "airp" }); }
+      }
+    }
+
+    /* ---- coups portés ---- */
+    function applyHit(att, def, hit) {
+      const m = att.move;
+      att.hitDone = true; att.contact = true;
+      // parade de Phantom
+      if (def.st === "parry" && def.fr >= def.move.su && def.fr < def.move.su + def.move.ac && m.kind === "strike") {
+        E("parry", { side: def.side, x: hit.x, y: hit.y });
+        S.hitstop = 10;
+        const pm = def.move;
+        start(def, "attack"); def.move = Object.assign({}, def.moves.jab, { s: "palmS", c: "parry", su: 2, ac: 4, rc: 14, dmg: pm.dmg, kd: true, push: 140, h: "mid", label: "Reflet" }); def.hitDone = false;
+        start(att, "stagger"); att.stun = 26; att.move = null; return;
+      }
+      // esquive
+      if (def.st === "dodge" && def.fr >= 2 && def.fr <= 15) {
+        att.hitDone = true; att.contact = false;
+        if (!def.dodgeHit) { def.dodgeHit = true; def.punishWin = 32; def.sp = Math.min(100, def.sp + 6); E("evade", { side: def.side, x: hit.x, y: hit.y }); }
+        return;
+      }
+      if (def.inv > 0 || def.st === "down" || def.st === "getup" || def.st === "ko") return;
+      const facingAtt = def.facing === -att.facing || Math.abs(def.x - att.x) < 10;
+      const blocking = (def.st === "block" || (holding(def, "G") && actionable(def))) && facingAtt;
+      const okHeight = !blocking ? false : m.h === "low" ? def.crouchBlock || down(def) : m.h === "over" ? !(def.crouchBlock || down(def)) : true;
+      const dmgBase = m.dmg * opts.dmgScale;
+      if (blocking && okHeight) {
+        const cost = dmgBase * 1.3 * (def.c.blockCost || 1);
+        def.stam -= cost; def.stats.blocks++;
+        att.combo = 0;
+        if (def.stam <= 0) {
+          def.stam = 0; start(def, "stagger"); def.stun = 44; def.vx = -att.facing * -4 * 0;
+          def.vx = att.facing * 6; E("guardbreak", { side: def.side, x: hit.x, y: hit.y }); S.hitstop = 10; S.shake = 10; return;
+        }
+        start(def, "blockstun"); def.stun = m.bs; def.vx = att.facing * (m.push / def.c.weight) * 0.12;
+        def.sp = Math.min(100, def.sp + 3); att.sp = Math.min(100, att.sp + 1.5);
+        E("block", { side: def.side, x: hit.x, y: hit.y, heavy: !!m.heavy });
+        S.hitstop = m.heavy ? 6 : 4;
+        return;
+      }
+      // touché
+      const comboing = ["hitstun", "stagger"].includes(def.st) || (def.st === "down" && false) || (!grounded(def) && def.st === "juggle");
+      if (comboing) att.combo++; else att.combo = 1;
+      def.comboTaken = att.combo;
+      const scale = Math.max(0.45, 1 - 0.11 * (att.combo - 1));
+      let dmg = dmgBase * scale * def.c.taken * (m.heavy || m.kd ? def.c.heavyTaken / def.c.taken : 1);
+      if (m.isCounter) dmg *= 1.25;
+      if (m.punish) { dmg *= 1; def.stun = 0; }
+      if (def.st === "attack" && def.fr < def.move.su) { dmg *= 1.2; E("counterhit", { side: att.side }); }   // interrompt une préparation
+      dmg = Math.round(dmg * 10) / 10;
+      // armure du Bélier
+      if (def.st === "attack" && def.move && def.move.armor && !def.armorUsed && m.light) { def.armorUsed = true; def.hp -= dmg * 0.5; E("armor", { side: def.side, x: hit.x, y: hit.y }); S.hitstop = 5; return; }
+      def.hp = Math.max(0, def.hp - dmg);
+      att.stats.hits++; att.stats.dmg += dmg; att.stats.maxCombo = Math.max(att.stats.maxCombo, att.combo);
+      if (att.combo === 2) att.stats.combos++;
+      if (m.punish) att.stats.punishes++;
+      att.sp = Math.min(100, att.sp + dmg * 1.3); def.sp = Math.min(100, def.sp + dmg * 0.8);
+      def.move = null; def.airAtk = false;
+      const hs = Math.max(8, Math.round(m.hs * (1 - 0.12 * (att.combo - 1))));
+      const push = (m.push / def.c.weight) * (1 + 0.15 * (att.combo - 1));
+      const big = m.heavy || m.kd || dmg >= 12;
+      E("hit", { side: def.side, by: att.side, x: hit.x, y: hit.y, dmg, zone: hit.zone, heavy: big, combo: att.combo, move: m.id, label: m.label, punish: !!m.punish, counter: !!m.isCounter });
+      if (att.combo >= 2) E("combo", { side: att.side, n: att.combo });
+      S.hitstop = big ? 9 : 5; S.shake = big ? 9 : 3;
+      if (def.hp <= 0) return knockout(att, def, hit);
+      if (m.kd || (!grounded(def))) {
+        start(def, "down"); def.downKind = m.id === "sweep" ? "sweep" : "back"; def.vx = att.facing * Math.max(4, push * 0.09); def.vy = m.antiair || !grounded(def) ? 9 : 4; def.h = Math.max(def.h, 1);
+        att.combo = att.combo; return;
+      }
+      start(def, "hitstun"); def.stun = hs; def.hitZone = hit.zone === "head" ? "high" : m.h === "low" ? "low" : "body";
+      def.vx = att.facing * push * 0.11;
+    }
+
+    function knockout(att, def, hit) {
+      start(def, "ko"); def.vx = att.facing * 7; def.vy = 10; def.h = Math.max(def.h, 1);
+      S.hitstop = 14; S.slow = 70; S.shake = 18;
+      E("ko", { side: def.side, by: att.side, x: hit ? hit.x : def.x, y: hit ? hit.y : GROUND - 200 });
+      endRound(att.side, "ko");
+    }
+
+    function endRound(winner, how) {
+      if (S.phase !== "fight") return;
+      S.phase = "roundEnd"; S.phaseFr = 0; S.roundWinner = winner; S.roundHow = how;
+      if (winner === 0 || winner === 1) S.wins[winner]++;
+      S.roundLog.push({ round: S.round, winner, how, time: Math.round((opts.roundTime * FPS - S.timer) / FPS), hp: F.map(f => Math.round(f.hp)) });
+      E("roundEnd", { winner, how });
+    }
+
+    /* ---- prises ---- */
+    function tryGrab(f) {
+      const o = other(f), m = f.move;
+      if (f.fr < m.su || f.fr >= m.su + m.ac || f.hitDone) return;
+      const dist = Math.abs(o.x - f.x) - f.d.half - o.d.half;
+      const okState = grounded(o) && !["down", "getup", "ko", "dodge", "thrown", "fin_v", "jump"].includes(o.st) && o.inv <= 0;
+      if (dist <= m.range - 60 && okState && Math.sign(o.x - f.x || f.facing) === f.facing) {
+        f.hitDone = true;
+        const kind = m.throwKind === "spin" ? "throwSpin" : (f.grabBack || back(f)) ? "throwB" : "throwF";
+        beginSeq(f, o, kind, (m.throwDmg || 12) * f.c.throwDmg * opts.dmgScale);
+        f.stats.throws++;
+        E("grab", { side: f.side, kind });
+      }
+    }
+    function beginSeq(att, vic, kind, dmgTotal) {
+      const sq = SEQ[kind];
+      att.seq = { kind, sq, vic: vic.side, dmgTotal, fin: kind.startsWith("fin_") }; att.seqFr = 0;
+      start(att, att.seq.fin ? "fin" : "throw"); start(vic, att.seq.fin ? "fin_v" : "thrown");
+      vic.seqBy = att.side; att.move = null; vic.move = null; att.vx = 0; vic.vx = 0; vic.h = 0; att.h = 0;
+      att.combo = 0;
+    }
+    function startFinisher(f, o) {
+      f.sp = 0; f.stats.finishers++;
+      beginSeq(f, o, "fin_" + f.cid, 30);
+      E("finisher", { side: f.side, name: f.c.finisher.name });
+      S.slow = 0;
+    }
+    function runSeq(att) {
+      const v = F[att.seq.vic], sq = att.seq.sq, fr = att.seqFr;
+      // dégagement : la victime appuie sur PRISE dans les 8 premières images (projections simples seulement)
+      if (!att.seq.fin && att.seq.kind !== "throwSpin" && fr < 9 && has(v, "T")) {
+        use(v, "T"); att.seq = null; v.seqBy = null;
+        start(att, "blockstun"); att.stun = 14; att.vx = -att.facing * 7;
+        start(v, "blockstun"); v.stun = 14; v.vx = att.facing * 7;
+        E("break", { side: v.side }); return;
+      }
+      sq.hits.forEach(h => {
+        if (h.f === fr) {
+          const share = att.seq.fin ? h.dmg : att.seq.dmgTotal * (h.dmg / sq.hits.reduce((a, b) => a + b.dmg, 0));
+          const dmg = Math.round(share * v.c.taken * 10) / 10;
+          v.hp = Math.max(0, v.hp - dmg); att.stats.dmg += dmg; att.stats.hits++;
+          att.sp = Math.min(100, att.sp + (att.seq.fin ? 0 : dmg)); v.sp = Math.min(100, v.sp + dmg * 0.6);
+          const J = v.J || {}; const px = J.pelvis ? J.pelvis[0] : v.x, py = J.pelvis ? J.pelvis[1] : GROUND - 80;
+          E("slam", { side: v.side, by: att.side, x: px, y: py, dmg, heavy: h.shake >= 10, fin: att.seq.fin });
+          S.shake = h.shake; S.hitstop = h.shake >= 10 ? 8 : 3;
+          if (h.slow) S.slow = h.slow;
+        }
+      });
+      att.seqFr++;
+      if (att.seqFr >= sq.len) {
+        const swap = sq.swap;
+        att.seq = null; v.seqBy = null;
+        start(att, "idle");
+        if (v.hp <= 0) { start(v, "ko"); v.koLying = true; E("ko", { side: v.side, by: att.side, x: v.x, y: GROUND - 60 }); S.slow = Math.max(S.slow, 60); endRound(att.side, "ko"); }
+        else { start(v, "down"); v.fr = 18; v.downKind = swap ? "swap" : "back"; }
+        if (swap) att.facing = -att.facing;
+      }
+    }
+
+    /* ---- avance d'un combattant ---- */
+    function update(f) {
+      const o = other(f);
+      f.fr++;
+      if (f.counterWin > 0) f.counterWin--;
+      if (f.punishWin > 0) f.punishWin--;
+      if (f.inv > 0) f.inv--;
+      switch (f.st) {
+        case "attack": {
+          const m = f.move;
+          if (!m) { start(f, "idle"); break; }
+          if (m.dash && f.fr <= m.su + m.ac) f.vx = m.dash * f.facing * (f.fr > m.su - 4 ? 1 : 0.3); else f.vx *= 0.8;
+          if (m.hop && f.fr === m.su - 2) { f.vy = m.hop; f.h = 0.1; }
+          const end = m.su + m.ac + m.rc;
+          // enchaînements : après contact, pendant la récupération
+          if (f.contact && f.fr > m.su && f.fr < end - 2) {
+            for (const k of ["P", "K", "H"]) if (m.chain && m.chain[k] && has(f, k)) {
+              use(f, k); const nx = m.chain[k]; startMove(f, nx); E("chain", { side: f.side, move: nx }); return;
+            }
+          }
+          if (f.fr >= end) { f.move = null; start(f, "idle"); }
+          break;
+        }
+        case "grab": {
+          const m = f.move; tryGrab(f);
+          if (f.st === "grab" && f.fr >= m.su + m.ac + m.rc) { f.move = null; start(f, "idle"); }
+          if (f.st === "grab" && f.fr === m.su + m.ac && !f.hitDone) E("whiff", { side: f.side, move: "grab" });
+          break;
+        }
+        case "parry": { const m = f.move; if (f.fr >= m.su + m.ac + m.rc) { f.move = null; start(f, "idle"); } break; }
+        case "block": if (!holding(f, "G")) start(f, "idle"); f.crouchBlock = down(f); f.vx = 0; break;
+        case "blockstun": f.vx *= 0.82; if (f.fr >= f.stun) { start(f, holding(f, "G") ? "block" : "idle"); f.counterWin = f.c.counterWin || 14; } break;
+        case "hitstun": f.vx *= 0.85; if (f.fr >= f.stun) { start(f, "idle"); f.comboTaken = 0; o.combo = 0; } break;
+        case "stagger": f.vx *= 0.85; if (f.fr >= f.stun) { start(f, "idle"); } break;
+        case "dodge": {
+          const len = 20;
+          if (f.dodgeKind === "back") f.vx = f.fr < 12 ? -7.5 * f.facing : 0; else f.vx = 0;
+          f.depth = f.dodgeKind === "side" ? Math.sin(Math.min(1, f.fr / len) * Math.PI) : 0;
+          if (f.fr >= len) { f.depth = 0; start(f, "idle"); }
+          break;
+        }
+        case "down": {
+          if (!grounded(f)) break;
+          f.vx *= 0.86;
+          if (f.fr === 20) E("land", { side: f.side, x: f.x });
+          if (f.fr >= 64) { start(f, "getup"); f.inv = 26; }
+          break;
+        }
+        case "getup": f.vx = 0; if (f.fr >= 24) { start(f, "idle"); f.inv = 6; } break;
+        case "ko": if (grounded(f)) f.vx *= 0.86; if (f.fr === 22) E("land", { side: f.side, x: f.x, ko: true }); break;
+        case "jump":
+          if (f.move) { if (f.fr > f.move.su + f.move.ac + f.move.rc) { f.move = null; } }
+          break;
+        case "throw": case "fin": runSeq(f); break;
+      }
+    }
+
+    function physics(f) {
+      if (f.st === "thrown" || f.st === "fin_v" || f.st === "throw" || f.st === "fin") return;
+      if (f.h > 0 || f.vy > 0) {
+        f.h += f.vy; f.vy -= GRAVITY;
+        if (f.h <= 0) {
+          f.h = 0; f.vy = 0;
+          if (f.st === "jump") { start(f, "idle"); f.move = null; f.airAtk = false; E("land", { side: f.side, x: f.x, soft: true }); f.vx = 0; }
+          else if (f.st === "attack" && f.move && f.move.hop) { /* le genou retombe */ }
+        }
+      }
+      f.x += f.vx;
+    }
+
+    function separate() {
+      const [a, b] = F;
+      const busy = s => ["throw", "thrown", "fin", "fin_v"].includes(s);
+      if (busy(a.st) || busy(b.st)) return;
+      const overlapY = Math.abs(a.h - b.h) < 150;
+      const minD = a.d.half + b.d.half;
+      const dx = b.x - a.x;
+      if (overlapY && Math.abs(dx) < minD && a.depth < 0.5 && b.depth < 0.5) {
+        const push = (minD - Math.abs(dx)) / 2, s = dx === 0 ? (a.facing > 0 ? 1 : -1) : Math.sign(dx);
+        a.x -= push * s; b.x += push * s;
+      }
+      for (const f of F) f.x = clamp(f.x, LEFT + f.d.half, RIGHT - f.d.half);
+      // si l'un est bloqué contre la corde, l'autre recule
+      if (overlapY && Math.abs(b.x - a.x) < minD - 1 && a.depth < 0.5 && b.depth < 0.5) {
+        const s = Math.sign(b.x - a.x) || 1;
+        if (a.x <= LEFT + a.d.half + 0.5 || a.x >= RIGHT - a.d.half - 0.5) b.x = a.x + s * minD; else a.x = b.x - s * minD;
+        for (const f of F) f.x = clamp(f.x, LEFT + f.d.half, RIGHT - f.d.half);
+      }
+    }
+
+    function autoFace(f) {
+      const o = other(f);
+      if (!grounded(f)) return;
+      if (!["idle", "walk", "crouch", "block"].includes(f.st)) return;
+      const want = o.x >= f.x ? 1 : -1;
+      if (want !== f.facing && Math.abs(o.x - f.x) > 12) { f.facing = want; f.turned = 6; }
+    }
+
+    /* ---- pose de chaque état ---- */
+    function poseOf(f) {
+      const m = f.move, fr = f.fr;
+      const breath = Math.sin((S.tick + f.side * 40) / 14);
+      switch (f.st) {
+        case "idle": { const g = lerpPose(P("guard"), P("guard2"), (breath + 1) / 2); return g; }
+        case "walk": { const t = (S.tick * 0.11 * f.c.speed) % 4; const ks = [P("walkA"), P("walkB"), P("walkC"), P("walkB"), P("walkA")]; const i = Math.floor(t); return lerpPose(ks[i], ks[i + 1], ease(t - i)); }
+        case "crouch": return P("crouch");
+        case "block": return f.crouchBlock ? P("cblock") : P("block");
+        case "blockstun": return lerpPose(f.crouchBlock ? P("cblock") : P("block"), Object.assign({}, f.crouchBlock ? P("cblock") : P("block"), { lean: -6, hd: -18 }), Math.sin(Math.min(1, fr / Math.max(1, f.stun)) * Math.PI));
+        case "hitstun": { const hp = f.hitZone === "high" ? P("hitHigh") : f.hitZone === "low" ? P("hitLow") : P("hitBody"); return anim([[0, P("guard")], [3, hp], [Math.max(4, f.stun - 4), hp], [f.stun, P("guard")]], fr); }
+        case "stagger": return anim([[0, P("hitHigh")], [6, P("stagger")], [Math.max(7, f.stun - 6), P("stagger")], [f.stun, P("guard")]], fr);
+        case "jump": {
+          if (m) { const end = m.su + m.ac; return anim([[0, P("jump")], [m.su, P(m.s)], [end, P(m.s)], [end + m.rc, P("jump")]], fr); }
+          return f.vy > 4 ? P("jump") : lerpPose(P("jump"), P("fall"), clamp((4 - f.vy) / 18, 0, 1));
+        }
+        case "attack": case "grab": case "parry": {
+          if (!m) return P("guard");
+          const base = m.crouch ? P("crouch") : P("guard");
+          const c = P(m.c), s = P(m.s), su = m.su, act = su + m.ac, end = act + m.rc;
+          return anim([[0, base], [Math.max(1, Math.round(su * 0.6)), c], [su, s], [act, s], [end, base]], fr);
+        }
+        case "dodge": { const p = f.dodgeKind === "back" ? P("dodgeBack") : P("dodgeSide"); return anim([[0, P("guard")], [5, p], [14, p], [20, P("guard")]], fr); }
+        case "down": {
+          if (f.downKind === "sweep") return anim([[0, P("hitLow")], [10, Object.assign({}, P("down"), { rot: 60 })], [20, P("down")]], fr);
+          return anim([[0, P("hitHigh")], [12, Object.assign({}, P("down"), { rot: 70 })], [20, P("down")], [60, P("down")], [64, P("getup")]], fr);
+        }
+        case "getup": return anim([[0, P("getup")], [16, P("crouch")], [24, P("guard")]], fr);
+        case "ko": return anim([[0, P("hitHigh")], [14, Object.assign({}, P("down"), { rot: 70 })], [22, P("down")]], fr);
+        case "win": return anim([[0, P("guard")], [20, P("victory")], [80, P("victory")], [110, P("victory2")], [160, P("victory")]], fr % 160);
+        case "lose": return P("down");
+        case "throw": case "fin": { const sq = f.seq.sq; const fr2 = f.seqFr; return seqPose(sq, fr2, "a"); }
+        case "thrown": case "fin_v": { const a = F[f.seqBy]; if (!a || !a.seq) return P("down"); return seqPose(a.seq.sq, a.seqFr, "v"); }
+      }
+      return P("guard");
+    }
+    function seqPose(sq, fr, who) {
+      const ks = sq.keys.map(k => [k.f, typeof k[who] === "string" ? P(k[who]) : k[who]]);
+      return anim(ks, fr);
+    }
+    function seqPlace(att) {               // place la victime d'une séquence
+      const sq = att.seq.sq, v = F[att.seq.vic], fr = att.seqFr;
+      const ks = sq.keys;
+      let dx = ks[0].dx, dh = ks[0].dh, ah = 0, spin = 0;
+      for (let i = 1; i < ks.length; i++) if (fr <= ks[i].f) {
+        const t = ease((fr - ks[i - 1].f) / Math.max(1, ks[i].f - ks[i - 1].f));
+        dx = ks[i - 1].dx + (ks[i].dx - ks[i - 1].dx) * t; dh = ks[i - 1].dh + (ks[i].dh - ks[i - 1].dh) * t;
+        ah = (ks[i - 1].ah || 0) + ((ks[i].ah || 0) - (ks[i - 1].ah || 0)) * t;
+        spin = ks[i].spin ? ks[i].spin * t : 0; break;
+      } else if (i === ks.length - 1) { dx = ks[i].dx; dh = ks[i].dh; ah = ks[i].ah || 0; }
+      att.h = ah;
+      // tournoiement : l'attaquant et la victime changent de côté visuellement
+      att.spinView = spin ? Math.cos(spin * Math.PI * 2) : 1;
+      const side = att.facing * (spin ? att.spinView : 1);
+      v.x = clamp(att.x + side * dx, LEFT - 60, RIGHT + 60); v.h = dh; v.facing = -att.facing * (spin ? Math.sign(att.spinView) || 1 : 1);
+      v.spinView = att.spinView;
+    }
+
+    function computeJ(f) {
+      f.pose = poseOf(f);
+      const Jl = fkLocal(f.d, f.pose);
+      // en l'air ou porté : hauteur de bassin de référence (debout) pour ne pas « recaler » le corps
+      const ref = (f.st === "thrown" || f.st === "fin_v") ? 0 : null;
+      if (ref === 0) f.J = toWorld(Jl, f.x, f.h, f.facing);
+      else if (!grounded(f) && f.st !== "down" && f.st !== "ko") f.J = toWorld(Jl, f.x, f.h, f.facing, STANDLIFT(f));
+      else f.J = toWorld(Jl, f.x, f.h, f.facing);
+    }
+    const standCache = {};
+    function STANDLIFT(f) { if (!standCache[f.cid]) standCache[f.cid] = fkLocal(f.d, P0).lift; return standCache[f.cid]; }
+
+    /* ======================= un pas de simulation ======================= */
+    function step(inputs) {
+      S.events = [];
+      S.tick++;
+      inputs = inputs || [];
+      F.forEach((f, i) => readInput(f, inputs[i]));
+      if (S.slow > 0) S.slow--;
+      if (S.shake > 0) S.shake *= 0.86;
+      if (S.shake < 0.3) S.shake = 0;
+      if (S.hitstop > 0) { S.hitstop--; F.forEach(f => { f.prevUp = up(f); }); return S; }
+      S.phaseFr++;
+      if (S.phase === "intro") {
+        F.forEach(f => { if (f.st !== "idle") start(f, "idle"); f.vx = 0; });
+        if (S.phaseFr === 1) E("round", { n: S.round, final: S.wins[0] === S.wins[1] && S.wins[0] === Math.floor(opts.rounds / 2) });
+        if (S.phaseFr === 90) E("fight", {});
+        if (S.phaseFr >= 110) { S.phase = "fight"; S.phaseFr = 0; }
+      }
+      const fighting = S.phase === "fight";
+      F.forEach(f => {
+        if (fighting) think(f);
+        f.prevUp = up(f);
+      });
+      F.forEach(f => update(f));
+      F.forEach(f => physics(f));
+      separate();
+      F.forEach(f => autoFace(f));
+      F.forEach(f => { if (f.st === "throw" || f.st === "fin") { if (f.seq) seqPlace(f); } });
+      F.forEach(f => computeJ(f));
+      // collisions des coups
+      for (const att of F) {
+        const m = att.move;
+        if (!m || att.hitDone || m.kind !== "strike") continue;
+        const inAir = att.st === "jump";
+        if (!(att.st === "attack" || inAir)) continue;
+        if (att.fr < m.su || att.fr >= m.su + m.ac) { if (att.fr === m.su + m.ac && !att.hitDone && !att.contact) { E("whiff", { side: att.side, move: m.id, heavy: !!m.heavy }); } continue; }
+        const def = other(att);
+        if (def.st === "throw" || def.st === "thrown" || def.st === "fin" || def.st === "fin_v") continue;
+        if (def.depth > 0.4 && def.st === "dodge") { const h = hitTest(att, def); if (h) applyHit(att, def, h); continue; }
+        const h = hitTest(att, def);
+        if (h) applyHit(att, def, h);
+      }
+      // jauges
+      F.forEach(f => {
+        const resting = ["idle", "walk", "crouch"].includes(f.st);
+        const rate = (resting ? 0.32 : f.st === "block" ? 0.06 : 0.12) * f.c.regen;
+        f.stam = Math.min(100, f.stam + rate);
+      });
+      // chronomètre
+      if (fighting) {
+        S.timer--;
+        if (S.timer <= 0) {
+          const [a, b] = F;
+          if (Math.abs(a.hp - b.hp) < 0.05) {
+            if (opts.tie === "prolongation" && !S.overtime) { S.overtime = true; S.timer = opts.overtime * FPS; E("overtime", {}); }
+            else { E("timeup", { draw: true }); endRound(-1, "draw"); }
+          } else { E("timeup", {}); endRound(a.hp > b.hp ? 0 : 1, "time"); }
+        }
+      }
+      if (S.phase === "roundEnd") {
+        if (S.phaseFr === 60) F.forEach(f => { if (S.roundWinner === f.side && f.st !== "ko") { start(f, "win"); f.vx = 0; } });
+        if (S.phaseFr >= 210) {
+          const need = Math.floor(opts.rounds / 2) + 1;
+          if (S.wins[0] >= need || S.wins[1] >= need || (opts.training && false)) {
+            S.phase = "matchEnd"; S.phaseFr = 0; S.winner = S.wins[0] > S.wins[1] ? 0 : 1;
+            F.forEach(f => { if (f.side === S.winner) start(f, "win"); });
+            E("matchEnd", { winner: S.winner });
+          } else { S.round++; resetRound(); }
+        }
+      }
+      if (S.phase === "fight" || S.phase === "roundEnd") S.matchFr++;
+      return S;
+    }
+
+    resetRound();
+    F.forEach(f => computeJ(f));
+    return { step, S, F, view: () => S };
+  }
+
+  /* ======================= IA d'entraînement =======================
+     Décide à partir de la situation : distance, état de l'adversaire, jauges. Délai de réaction selon le niveau. */
+  let aiCount = 0;
+  function AI(level, seed) {
+    const L = { facile: { react: 22, block: 0.35, punish: 0.3, aggr: 0.25 }, normal: { react: 14, block: 0.6, punish: 0.6, aggr: 0.45 }, difficile: { react: 8, block: 0.85, punish: 0.9, aggr: 0.6 } }[level || "normal"];
+    const r = rng(seed != null ? seed : 777 + 97 * (aiCount++));
+    let plan = null, wait = 0, held = 0, seen = [];
+    const out = { x: 0, y: 0, b: 0, p: 0 };
+    return function (S, me) {
+      const f = S.F[me], o = S.F[1 - me];
+      seen.push({ st: o.st, fr: o.fr, move: o.move && o.move.id, x: o.x });
+      if (seen.length > 40) seen.shift();
+      const past = seen[Math.max(0, seen.length - 1 - L.react)] || seen[0];
+      out.p = 0; out.b = 0; out.x = 0; out.y = 0;
+      if (S.phase !== "fight") return out;
+      const dist = Math.abs(o.x - f.x) - f.d.half - o.d.half;
+      const toward = Math.sign(o.x - f.x) || f.facing;
+      const want = f.cid === "titan" || f.cid === "atlas" ? 30 : f.cid === "volt" ? 70 : 90;
+      if (wait > 0) { wait--; if (plan === "block") out.b |= B.G; if (plan === "away") out.x = -toward; return out; }
+      plan = null;
+      const threat = past && (past.st === "attack" && past.move !== null) && dist < 190;
+      if (threat && r() < L.block) {
+        if (r() < 0.25 && f.stam > 30) { out.p |= B.D; wait = 12; return out; }
+        plan = "block"; out.b |= B.G; wait = 10; return out;
+      }
+      // punir une attaque ratée
+      if ((o.st === "attack" || o.st === "grab") && o.move && o.fr > o.move.su + o.move.ac && dist < 120 && r() < L.punish) { out.p |= B.H; return out; }
+      if (f.punishWin > 0) { out.p |= B.H; return out; }
+      if (f.counterWin > 0 && dist < 110) { out.p |= B.P; return out; }
+      if (o.st === "down" || o.st === "getup") { if (dist > 140) out.x = toward; return out; }
+      if (f.sp >= 100 && dist < 120) { out.p |= B.S; return out; }
+      if (f.sp >= 50 && dist > 120 && dist < 320 && r() < 0.03) { out.p |= B.S; return out; }
+      if (o.st === "jump" && dist < 160 && r() < 0.5) { out.y = -1; out.p |= B.H; return out; }
+      if (dist > want + 40) { out.x = toward; if (dist > 380 && r() < 0.01) out.y = 1; return out; }
+      if (f.st === "attack" && f.contact) {   // enchaînement
+        if (f.move.id === "jab") out.p |= r() < 0.6 ? B.P : B.K; else if (f.move.id === "hook") out.p |= B.K;
+        return out;
+      }
+      if (dist < 70 && (o.st === "block" || o.st === "blockstun") && r() < 0.25) { out.p |= B.T; return out; }
+      if (dist < 140 && r() < L.aggr * 0.25) { const c = r(); out.p |= c < 0.45 ? B.P : c < 0.75 ? B.K : c < 0.9 ? B.H : B.T; return out; }
+      if (dist < want - 20 && r() < 0.05) { plan = "away"; wait = 10; out.x = -toward; return out; }
+      if (r() < 0.02) out.y = -1;
+      return out;
+    };
+  }
+
+  const WEAPON_WORDS = ["arme", "couteau", "épée", "pistolet", "fusil", "lame", "tir", "projectile", "batte", "chaise", "bâton", "sword", "gun", "knife"];
+  return { W, H, GROUND, LEFT, RIGHT, FPS, B, CHARS, ROSTER, POSES, BASE_MOVES, SPECIALS, SEQ, movesFor, fkLocal, toWorld, dims, lerpPose, anim, Match, AI, hurtShapes, hitTest, WEAPON_WORDS };
+});

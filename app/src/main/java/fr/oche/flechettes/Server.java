@@ -13,6 +13,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -47,6 +48,32 @@ class Server extends Thread {
 
     private final Map<String, Channel> channels = new HashMap<>();
     private final Map<String, long[]> rate = new HashMap<>();
+
+    // IMPACT ARENA : liaison temps réel (WebSocket) entre la télé (hôte) et les manettes
+    static final class WsConn {
+        final Socket sock; final OutputStream out; final int id; final boolean host;
+        long winStart = 0; int winCount = 0;
+        WsConn(Socket s, OutputStream o, int id, boolean host) { this.sock = s; this.out = o; this.id = id; this.host = host; }
+        synchronized void send(String text) {
+            try {
+                byte[] p = text.getBytes(StandardCharsets.UTF_8);
+                ByteArrayOutputStream b = new ByteArrayOutputStream(p.length + 10);
+                b.write(0x81);
+                if (p.length < 126) b.write(p.length);
+                else if (p.length < 65536) { b.write(126); b.write(p.length >> 8); b.write(p.length & 255); }
+                else { b.write(127); for (int i = 7; i >= 0; i--) b.write((int) (((long) p.length >> (8 * i)) & 255)); }
+                b.write(p);
+                out.write(b.toByteArray()); out.flush();
+            } catch (IOException e) { try { sock.close(); } catch (IOException ignored) { } }
+        }
+        synchronized void raw(int opcode, byte[] p) {
+            try { out.write(0x80 | opcode); out.write(p.length); out.write(p); out.flush(); } catch (IOException ignored) { }
+        }
+    }
+    private final Object wsLock = new Object();
+    private WsConn wsHost = null;
+    private final Map<Integer, WsConn> wsPads = new HashMap<>();
+    private int wsSeq = 0;
 
     Server(AssetManager assets, int port) throws IOException {
         this.assets = assets;
@@ -213,14 +240,21 @@ class Server extends Thread {
             if (q >= 0) { query = path.substring(q + 1); path = path.substring(0, q); }
 
             int length = 0;
-            String h;
+            String h, wsKey = null, upgrade = null;
             int headers = 0;
             while ((h = readLine(in)) != null && !h.isEmpty()) {
                 if (++headers > 100) return;
                 int c = h.indexOf(':');
-                if (c > 0 && h.substring(0, c).trim().equalsIgnoreCase("content-length")) {
-                    try { length = Integer.parseInt(h.substring(c + 1).trim()); } catch (NumberFormatException ignored) { }
-                }
+                if (c <= 0) continue;
+                String name = h.substring(0, c).trim().toLowerCase(), value = h.substring(c + 1).trim();
+                if (name.equals("content-length")) {
+                    try { length = Integer.parseInt(value); } catch (NumberFormatException ignored) { }
+                } else if (name.equals("sec-websocket-key")) wsKey = value;
+                else if (name.equals("upgrade")) upgrade = value;
+            }
+            if (path.equals("/ws") && method.equals("GET") && wsKey != null && upgrade != null && upgrade.equalsIgnoreCase("websocket")) {
+                websocket(sock, in, sock.getOutputStream(), wsKey, local, query);
+                return;
             }
 
             OutputStream out = sock.getOutputStream();
@@ -292,6 +326,15 @@ class Server extends Thread {
                 case "/lg-engine.js":
                     send(out, 200, "application/javascript; charset=utf-8", asset("lg-engine.txt"));
                     break;
+                case "/arena":
+                    send(out, 200, "text/html; charset=utf-8", asset("arena.html"));
+                    break;
+                case "/ia-engine.js":
+                    send(out, 200, "application/javascript; charset=utf-8", asset("ia-engine.txt"));
+                    break;
+                case "/ia-qr.js":
+                    send(out, 200, "application/javascript; charset=utf-8", asset("ia-qr.txt"));
+                    break;
                 case "/mots":
                     send(out, 200, "text/html; charset=utf-8", asset("mots.html"));
                     break;
@@ -302,6 +345,121 @@ class Server extends Thread {
                     send(out, 404, "text/plain", bytes("not found"));
             }
         } catch (Exception ignored) { }
+    }
+
+    /* ---------------- WebSocket (RFC 6455, messages texte) ---------------- */
+    private void websocket(Socket sock, InputStream in, OutputStream out, String key, boolean local, String query) throws Exception {
+        boolean isHost = "host".equals(param(query, "role"));
+        if (isHost && !local) { send(out, 403, "text/plain", bytes("forbidden")); return; }
+        MessageDigest sha = MessageDigest.getInstance("SHA-1");
+        String accept = b64(sha.digest((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").getBytes(StandardCharsets.US_ASCII)));
+        out.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+        out.flush();
+        sock.setSoTimeout(isHost ? 60000 : 20000);
+        try { sock.setTcpNoDelay(true); } catch (Exception ignored) { }
+        WsConn c;
+        WsConn old = null;
+        synchronized (wsLock) {
+            c = new WsConn(sock, out, ++wsSeq, isHost);
+            if (isHost) { old = wsHost; wsHost = c; }
+            else {
+                if (wsPads.size() >= 16) { c.send("{\"t\":\"busy\"}"); return; }
+                wsPads.put(c.id, c);
+            }
+        }
+        if (old != null) try { old.sock.close(); } catch (IOException ignored) { }
+        if (!isHost) toHost("{\"t\":\"open\",\"id\":" + c.id + "}");
+        else c.send("{\"t\":\"hello\",\"pads\":" + padIds() + "}");
+        if (!isHost && hostConn() == null) c.send("{\"t\":\"nohost\"}");
+        StringBuilder msg = new StringBuilder();
+        try {
+            while (true) {
+                int b0 = in.read(), b1 = in.read();
+                if (b0 < 0 || b1 < 0) break;
+                boolean fin = (b0 & 0x80) != 0;
+                int op = b0 & 0x0f;
+                long len = b1 & 0x7f;
+                if (len == 126) len = ((in.read() & 255) << 8) | (in.read() & 255);
+                else if (len == 127) { len = 0; for (int i = 0; i < 8; i++) len = (len << 8) | (in.read() & 255); }
+                if (len > 65536 || len < 0) break;
+                byte[] mask = new byte[4];
+                boolean masked = (b1 & 0x80) != 0;
+                if (masked) readFully(in, mask);
+                byte[] p = new byte[(int) len];
+                readFully(in, p);
+                if (masked) for (int i = 0; i < p.length; i++) p[i] ^= mask[i & 3];
+                if (op == 8) { c.raw(8, new byte[0]); break; }
+                if (op == 9) { c.raw(10, p.length < 126 ? p : new byte[0]); continue; }
+                if (op == 10 || op == 2) continue;
+                msg.append(new String(p, StandardCharsets.UTF_8));
+                if (msg.length() > 65536) break;
+                if (!fin) continue;
+                String text = msg.toString();
+                msg.setLength(0);
+                if (isHost) fromHost(text); else fromPad(c, text);
+            }
+        } catch (IOException ignored) {
+        } finally {
+            synchronized (wsLock) {
+                if (isHost) { if (wsHost == c) wsHost = null; }
+                else wsPads.remove(c.id);
+            }
+            try { sock.close(); } catch (IOException ignored) { }
+            if (!isHost) toHost("{\"t\":\"close\",\"id\":" + c.id + "}");
+            else if (hostConn() == null) for (WsConn p : padList()) p.send("{\"t\":\"nohost\"}");
+        }
+    }
+
+    private WsConn hostConn() { synchronized (wsLock) { return wsHost; } }
+    private List<WsConn> padList() { synchronized (wsLock) { return new ArrayList<>(wsPads.values()); } }
+    private String padIds() { StringBuilder b = new StringBuilder("["); boolean f = true; for (WsConn p : padList()) { if (!f) b.append(','); b.append(p.id); f = false; } return b.append(']').toString(); }
+    private void toHost(String s) { WsConn h = hostConn(); if (h != null) h.send(s); }
+
+    /** Message d'une manette : limité en débit, vérifié (objet JSON), puis transmis à la télé avec l'identifiant de la connexion. */
+    private void fromPad(WsConn c, String text) {
+        long now = System.currentTimeMillis();
+        if (now - c.winStart > 1000) { c.winStart = now; c.winCount = 0; }
+        if (++c.winCount > 90) return;
+        if (text.length() > 2048) return;
+        String t = text.trim();
+        if (!t.startsWith("{") || !t.endsWith("}")) return;
+        try { new JSONObject(t); } catch (Exception e) { return; }
+        WsConn h = hostConn();
+        if (h == null) { c.send("{\"t\":\"nohost\"}"); return; }
+        h.send("{\"t\":\"msg\",\"id\":" + c.id + ",\"m\":" + t + "}");
+    }
+
+    /** Message de la télé : {"to": id | "all", "m": {...}} ou {"kick": id}. */
+    private void fromHost(String text) {
+        try {
+            JSONObject o = new JSONObject(text);
+            String kick = o.optString("kick");
+            if (kick != null && !kick.isEmpty()) {
+                WsConn p; synchronized (wsLock) { p = wsPads.get(Integer.parseInt(kick)); }
+                if (p != null) try { p.sock.close(); } catch (IOException ignored) { }
+                return;
+            }
+            String to = o.optString("to");
+            String m = o.getJSONObject("m").toString();
+            if ("all".equals(to)) { for (WsConn p : padList()) p.send(m); return; }
+            WsConn p; synchronized (wsLock) { p = wsPads.get(Integer.parseInt(to)); }
+            if (p != null) p.send(m);
+        } catch (Exception ignored) { }
+    }
+
+    private static void readFully(InputStream in, byte[] b) throws IOException {
+        int r = 0;
+        while (r < b.length) { int n = in.read(b, r, b.length - r); if (n < 0) throw new IOException("eof"); r += n; }
+    }
+
+    private static String b64(byte[] d) {
+        String a = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        StringBuilder s = new StringBuilder();
+        for (int i = 0; i < d.length; i += 3) {
+            int n = (d[i] & 255) << 16 | (i + 1 < d.length ? (d[i + 1] & 255) << 8 : 0) | (i + 2 < d.length ? d[i + 2] & 255 : 0);
+            s.append(a.charAt(n >> 18 & 63)).append(a.charAt(n >> 12 & 63)).append(i + 1 < d.length ? a.charAt(n >> 6 & 63) : '=').append(i + 2 < d.length ? a.charAt(n & 63) : '=');
+        }
+        return s.toString();
     }
 
     private static byte[] bytes(String s) {

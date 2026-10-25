@@ -7,7 +7,7 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
     <application
-        android:label="Oche"
+        android:label="Soirée Jeux"
         android:icon="@drawable/icon"
         android:banner="@drawable/banner"
         android:usesCleartextTraffic="true"
