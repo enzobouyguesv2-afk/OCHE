@@ -75,8 +75,19 @@ class Server extends Thread {
     private final Map<Integer, WsConn> wsPads = new HashMap<>();
     private int wsSeq = 0;
 
+    /* BLIND TEST SHOW : relais WebSocket par salle (/bts-ws). La page de la télé est l'arbitre ; le relais ne fait que transmettre. */
+    static final class BtsConn {
+        final WsConn ws; final String room, id; final boolean tv;
+        long winStart = 0; int winCount = 0;
+        BtsConn(WsConn ws, String room, String id, boolean tv) { this.ws = ws; this.room = room; this.id = id; this.tv = tv; }
+    }
+    private final Object btsLock = new Object();
+    private final Map<String, List<BtsConn>> btsRooms = new HashMap<>();
+    private final int port;
+
     Server(AssetManager assets, int port) throws IOException {
         this.assets = assets;
+        this.port = port;
         channels.put("lg", new Channel(4096));
         channels.put("mm", new Channel(2048));
         channels.put("bn", new Channel(1024));
@@ -257,6 +268,10 @@ class Server extends Thread {
                 websocket(sock, in, sock.getOutputStream(), wsKey, local, query);
                 return;
             }
+            if (path.equals("/bts-ws") && method.equals("GET") && wsKey != null && upgrade != null && upgrade.equalsIgnoreCase("websocket")) {
+                btsRelay(sock, in, sock.getOutputStream(), wsKey, local, query);
+                return;
+            }
 
             OutputStream out = sock.getOutputStream();
             String body = null;
@@ -342,6 +357,10 @@ class Server extends Thread {
                 case "/mm-engine.js":
                     send(out, 200, "application/javascript; charset=utf-8", asset("mm-engine.txt"));
                     break;
+                case "/blind-test-show.html":
+                case "/blindtest":
+                    send(out, 200, "text/html; charset=utf-8", local ? btsPage() : asset("blind-test-show.html"));
+                    break;
                 case "/bataille":
                     send(out, 200, "text/html; charset=utf-8", asset("bataille.html"));
                     break;
@@ -421,6 +440,137 @@ class Server extends Thread {
     private List<WsConn> padList() { synchronized (wsLock) { return new ArrayList<>(wsPads.values()); } }
     private String padIds() { StringBuilder b = new StringBuilder("["); boolean f = true; for (WsConn p : padList()) { if (!f) b.append(','); b.append(p.id); f = false; } return b.append(']').toString(); }
     private void toHost(String s) { WsConn h = hostConn(); if (h != null) h.send(s); }
+
+    /* ---------------- BLIND TEST SHOW ---------------- */
+    /** Page du Blind Test pour la télé : on ajoute en tête la déclaration de l'hôte (adresse pour le QR code, relais, voix de la TV). */
+    private byte[] btsPage() throws IOException {
+        String html = new String(asset("blind-test-show.html"), StandardCharsets.UTF_8);
+        String ip = lanIp();
+        StringBuilder js = new StringBuilder("<script>window.BTS_HOST={");
+        if (ip != null) js.append("publicUrl:'http://").append(ip).append(':').append(port).append("/blind-test-show.html',");
+        js.append("wsUrl:'ws://127.0.0.1:").append(port).append("/bts-ws'};")
+          .append("if(window.Android&&Android.speak){window.BTS_HOST.speak=function(t,o){Android.speak(String(t),String(o||'{}'))};")
+          .append("window.BTS_HOST.stop=function(){Android.stop()};window.BTS_HOST.hasEndCallback=true;}</script>");
+        int h = html.indexOf("<head>");
+        html = h < 0 ? js + html : html.substring(0, h + 6) + js + html.substring(h + 6);
+        return html.getBytes(StandardCharsets.UTF_8);
+    }
+
+    /** Adresse de la télé sur le Wi-Fi (pour le QR code des téléphones). */
+    static String lanIp() {
+        String other = null;
+        try {
+            for (java.net.NetworkInterface ni : java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces())) {
+                if (!ni.isUp() || ni.isLoopback()) continue;
+                for (java.net.InetAddress a : java.util.Collections.list(ni.getInetAddresses())) {
+                    if (!(a instanceof java.net.Inet4Address) || a.isLoopbackAddress() || a.isLinkLocalAddress()) continue;
+                    if (a.isSiteLocalAddress()) return a.getHostAddress();
+                    if (other == null) other = a.getHostAddress();
+                }
+            }
+        } catch (Exception ignored) { }
+        return other;
+    }
+
+    /**
+     * Relais /bts-ws?room=CODE&id=ID&role=tv|player : chaque message est renvoyé aux autres clients de la salle.
+     * Protections ajoutées au protocole de référence (compatibles avec la page) :
+     *  - le rôle « tv » n'est accepté que depuis la télé elle-même ;
+     *  - un message doit porter l'identifiant de son expéditeur (« from ») : impossible de se faire passer pour la télé ;
+     *  - un message adressé à un joueur (« to ») ne part qu'à ce joueur : les autres téléphones ne le voient pas ;
+     *  - taille et débit limités, nombre de salles et de connexions limité.
+     */
+    private void btsRelay(Socket sock, InputStream in, OutputStream out, String key, boolean local, String query) throws Exception {
+        String room = param(query, "room"), id = param(query, "id"), role = param(query, "role");
+        room = room == null ? "" : room.toUpperCase();
+        if (room.length() > 12) room = room.substring(0, 12);
+        boolean tv = "tv".equals(role) || "tv".equals(id);
+        if (room.isEmpty() || id == null || id.isEmpty() || id.length() > 40 || (tv && !local)) { send(out, 403, "text/plain", bytes("forbidden")); return; }
+        MessageDigest sha = MessageDigest.getInstance("SHA-1");
+        String accept = b64(sha.digest((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").getBytes(StandardCharsets.US_ASCII)));
+        out.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+        out.flush();
+        sock.setSoTimeout(local ? 0 : 60000);
+        try { sock.setTcpNoDelay(true); } catch (Exception ignored) { }
+        BtsConn c = new BtsConn(new WsConn(sock, out, 0, tv), room, id, tv);
+        List<BtsConn> replaced = new ArrayList<>();
+        synchronized (btsLock) {
+            List<BtsConn> list = btsRooms.get(room);
+            if (list == null) {
+                if (btsRooms.size() >= 20) { try { sock.close(); } catch (IOException ignored) { } return; }
+                list = new ArrayList<>(); btsRooms.put(room, list);
+            }
+            for (BtsConn o : list) if (o.id.equals(id)) replaced.add(o);       // même joueur qui se reconnecte
+            list.removeAll(replaced);
+            if (list.size() >= 40) { try { sock.close(); } catch (IOException ignored) { } return; }
+            list.add(c);
+        }
+        for (BtsConn o : replaced) try { o.ws.sock.close(); } catch (IOException ignored) { }
+        StringBuilder msg = new StringBuilder();
+        try {
+            while (true) {
+                int b0 = in.read(), b1 = in.read();
+                if (b0 < 0 || b1 < 0) break;
+                boolean fin = (b0 & 0x80) != 0;
+                int op = b0 & 0x0f;
+                long len = b1 & 0x7f;
+                if (len == 126) len = ((in.read() & 255) << 8) | (in.read() & 255);
+                else if (len == 127) { len = 0; for (int i = 0; i < 8; i++) len = (len << 8) | (in.read() & 255); }
+                if (len > 262144 || len < 0) break;
+                byte[] mask = new byte[4];
+                boolean masked = (b1 & 0x80) != 0;
+                if (masked) readFully(in, mask);
+                byte[] p = new byte[(int) len];
+                readFully(in, p);
+                if (masked) for (int i = 0; i < p.length; i++) p[i] ^= mask[i & 3];
+                if (op == 8) { c.ws.raw(8, new byte[0]); break; }
+                if (op == 9) { c.ws.raw(10, p.length < 126 ? p : new byte[0]); continue; }
+                if (op == 10 || op == 2) continue;
+                msg.append(new String(p, StandardCharsets.UTF_8));
+                if (msg.length() > 262144) break;
+                if (!fin) continue;
+                String text = msg.toString();
+                msg.setLength(0);
+                btsForward(c, text);
+            }
+        } catch (IOException ignored) {
+        } finally {
+            boolean wasMember;
+            synchronized (btsLock) {
+                List<BtsConn> list = btsRooms.get(room);
+                wasMember = list != null && list.remove(c);
+                if (list != null && list.isEmpty()) btsRooms.remove(room);
+            }
+            try { sock.close(); } catch (IOException ignored) { }
+            if (wasMember) btsBroadcast(c, "{\"from\":\"server\",\"type\":\"peer-left\",\"id\":\"" + id + "\"}", null);
+        }
+    }
+
+    private static final java.util.regex.Pattern BTS_FROM = java.util.regex.Pattern.compile("\"from\"\\s*:\\s*\"([^\"]*)\"");
+    private static final java.util.regex.Pattern BTS_TO = java.util.regex.Pattern.compile("\"to\"\\s*:\\s*\"([^\"]*)\"");
+
+    private void btsForward(BtsConn c, String text) {
+        long now = System.currentTimeMillis();
+        if (!c.tv) {                                    // un téléphone : au plus 40 messages par seconde
+            if (now - c.winStart > 1000) { c.winStart = now; c.winCount = 0; }
+            if (++c.winCount > 40) return;
+            if (text.length() > 8192) return;
+        }
+        java.util.regex.Matcher f = BTS_FROM.matcher(text);
+        if (!f.find() || !f.group(1).equals(c.id)) return;          // expéditeur usurpé : ignoré
+        java.util.regex.Matcher t = BTS_TO.matcher(text);
+        String to = t.find() ? t.group(1) : null;
+        btsBroadcast(c, text, to == null || to.equals("*") ? null : to);
+    }
+
+    private void btsBroadcast(BtsConn from, String text, String onlyTo) {
+        List<BtsConn> targets = new ArrayList<>();
+        synchronized (btsLock) {
+            List<BtsConn> list = btsRooms.get(from.room);
+            if (list != null) for (BtsConn o : list) if (o != from && (onlyTo == null || o.id.equals(onlyTo))) targets.add(o);
+        }
+        for (BtsConn o : targets) o.ws.send(text);
+    }
 
     /** Message d'une manette : limité en débit, vérifié (objet JSON), puis transmis à la télé avec l'identifiant de la connexion. */
     private void fromPad(WsConn c, String text) {

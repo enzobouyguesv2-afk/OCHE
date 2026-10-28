@@ -1,12 +1,20 @@
 package fr.oche.flechettes;
 
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.Intent;
 import android.graphics.Bitmap;
+import android.net.Uri;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import android.speech.tts.Voice;
 import android.util.Base64;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -30,6 +38,10 @@ public class MainActivity extends Activity {
     private TextToSpeech tts;
     private boolean ttsReady = false;
     private String ip = "?";
+    private ValueCallback<Uri[]> fileCallback;          // « Mes fichiers » du Blind Test
+    private static final int PICK_FILES = 42;
+    private volatile String btsUtterance = "";          // dernière phrase du présentateur du Blind Test
+    private int btsSeq = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -51,6 +63,11 @@ public class MainActivity extends Activity {
             if (status == TextToSpeech.SUCCESS) {
                 tts.setLanguage(Locale.FRANCE);
                 tts.setSpeechRate(0.92f);
+                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                    @Override public void onStart(String id) { }
+                    @Override public void onDone(String id) { btsEnd(id); }
+                    @Override public void onError(String id) { btsEnd(id); }
+                });
                 ttsReady = true;
             }
         });
@@ -62,6 +79,24 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         web.setWebViewClient(new WebViewClient());
+        web.setWebChromeClient(new WebChromeClient() {
+            /* <input type="file"> : choix de fichiers audio (Blind Test, « Mes fichiers ») */
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+                if (fileCallback != null) fileCallback.onReceiveValue(null);
+                fileCallback = callback;
+                try {
+                    Intent i = params.createIntent();
+                    if (params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                    startActivityForResult(i, PICK_FILES);
+                } catch (ActivityNotFoundException e) {
+                    fileCallback = null;
+                    callback.onReceiveValue(null);
+                    web.evaluateJavascript("window.BTS&&BTS.Show&&BTS.Show.toast('Aucun explorateur de fichiers sur cette TV')", null);
+                }
+                return true;
+            }
+        });
         web.addJavascriptInterface(new Bridge(), "Android");
         web.loadUrl("http://127.0.0.1:" + PORT + "/menu?tv&ip=" + ip);
         web.requestFocus();
@@ -71,6 +106,50 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         if (web != null && web.canGoBack()) web.goBack();
         else super.onBackPressed();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == PICK_FILES && fileCallback != null) {
+            Uri[] res = null;
+            if (resultCode == RESULT_OK && data != null) {
+                ClipData clip = data.getClipData();
+                if (clip != null && clip.getItemCount() > 0) {
+                    res = new Uri[clip.getItemCount()];
+                    for (int k = 0; k < res.length; k++) res[k] = clip.getItemAt(k).getUri();
+                } else if (data.getData() != null) res = new Uri[]{data.getData()};
+            }
+            fileCallback.onReceiveValue(res);
+            fileCallback = null;
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
+    }
+
+    /** Fin d'une phrase du Blind Test : on prévient la page (seulement pour la phrase en cours). */
+    private void btsEnd(String id) {
+        if (id == null || !id.equals(btsUtterance)) return;
+        runOnUiThread(() -> { if (web != null) web.evaluateJavascript("window.BTS_onSpeechEnd&&BTS_onSpeechEnd()", null); });
+    }
+
+    private static double optNum(String json, String key, double def) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"" + key + "\"\\s*:\\s*(-?[0-9.]+)").matcher(json == null ? "" : json);
+        try { return m.find() ? Double.parseDouble(m.group(1)) : def; } catch (Exception e) { return def; }
+    }
+
+    /** Voix française proche du personnage demandé (Max : voix masculine, Léa : voix féminine), si la TV en propose. */
+    private void pickVoice(String persona) {
+        try {
+            String[] want = "lea".equals(persona) ? new String[]{"fr-fr-x-fra", "fr-fr-x-frc", "female", "femme"} : new String[]{"fr-fr-x-frd", "fr-fr-x-frb", "male", "homme"};
+            Voice best = null;
+            for (Voice v : tts.getVoices()) {
+                if (v.getLocale() == null || !"fr".equals(v.getLocale().getLanguage()) || v.isNetworkConnectionRequired()) continue;
+                String n = v.getName().toLowerCase(Locale.ROOT);
+                for (String w : want) if (n.contains(w)) { best = v; break; }
+                if (best != null) break;
+            }
+            if (best != null) tts.setVoice(best); else tts.setLanguage(Locale.FRANCE);
+        } catch (Exception ignored) { }
     }
 
     @Override
@@ -120,7 +199,37 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void say(String text) {
-            if (ttsReady && text != null) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "narration");
+            if (ttsReady && text != null) {
+                btsUtterance = "";
+                tts.setLanguage(Locale.FRANCE);
+                tts.setSpeechRate(0.92f);
+                tts.setPitch(1f);
+                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "narration");
+            }
+        }
+
+        /** Présentateur du Blind Test : optionsJson = {rate, pitch, volume, persona}. La page est prévenue à la fin (BTS_onSpeechEnd). */
+        @JavascriptInterface
+        public void speak(String text, String optionsJson) {
+            String id = "bts" + (++btsSeq);
+            btsUtterance = id;
+            if (!ttsReady || text == null) { btsEnd(id); return; }
+            String persona = optionsJson != null && optionsJson.contains("\"lea\"") ? "lea" : "max";
+            pickVoice(persona);
+            tts.setSpeechRate((float) Math.max(0.5, Math.min(2.0, optNum(optionsJson, "rate", 1.0) * 0.95)));
+            tts.setPitch((float) Math.max(0.5, Math.min(2.0, optNum(optionsJson, "pitch", 1.0))));
+            Bundle b = new Bundle();
+            b.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, (float) Math.max(0, Math.min(1, optNum(optionsJson, "volume", 1.0))));
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, b, id);
+        }
+
+        @JavascriptInterface
+        public void speak(String text) { speak(text, "{}"); }
+
+        @JavascriptInterface
+        public void stop() {
+            btsUtterance = "";
+            if (ttsReady) tts.stop();
         }
 
         @JavascriptInterface
