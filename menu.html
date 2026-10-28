@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Soirée Jeux</title>
+<style>
+:root{--bg:#101311;--panel:#181d1a;--line:#2a322d;--sisal:#efe6cf;--muted:#9aa395;--red:#d2412f;--night:#16182b;--moon:#e9e1c4;color-scheme:dark}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--sisal);font-family:"Barlow Semi Condensed","Arial Narrow",sans-serif;display:grid;place-items:center;padding:24px;box-sizing:border-box}
+h1{font-size:clamp(28px,3vw,44px);margin:0 0 28px;text-align:center;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.games{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;width:min(1300px,100%)}
+a{display:grid;gap:8px;padding:20px 30px;border-radius:22px;text-decoration:none;color:var(--sisal);border:3px solid transparent;outline:none;transition:transform .15s}
+a:focus,a:hover{border-color:var(--sisal);transform:scale(1.03)}
+a b{font-size:clamp(30px,3.6vw,58px);line-height:.95;font-weight:800;text-transform:uppercase}
+a span{font-size:clamp(16px,1.6vw,24px);color:var(--muted)}
+.darts{background:radial-gradient(circle at 85% 20%,rgba(42,138,87,.35),transparent 50%),var(--panel)}
+.impact{background:radial-gradient(circle at 85% 20%,rgba(255,59,47,.45),transparent 50%),radial-gradient(circle at 10% 90%,rgba(255,154,31,.3),transparent 45%),#0b0b0c}
+.words{background:radial-gradient(circle at 85% 18%,rgba(216,67,47,.35),transparent 45%),radial-gradient(circle at 15% 90%,rgba(47,125,225,.35),transparent 45%),#181a35}
+.bts{background:radial-gradient(circle at 85% 20%,rgba(255,46,136,.45),transparent 45%),radial-gradient(circle at 12% 90%,rgba(45,226,230,.3),transparent 45%),#120c26}
+.navy{background:radial-gradient(circle at 88% 30%,rgba(45,226,255,.35),transparent 45%),radial-gradient(circle at 8% 90%,rgba(255,122,26,.25),transparent 40%),#06111f}
+.wolf{background:radial-gradient(circle at 85% 18%,rgba(233,225,196,.28) 0 8%,transparent 30%),var(--night)}
+@media (prefers-reduced-motion:reduce){a{transition:none}}
+</style>
+</head>
+<body>
+<main style="width:min(1300px,100%)">
+  <h1>Soirée Jeux · ce soir, on joue à…</h1>
+  <div class="games">
+    <a class="darts" id="g-darts" href="#"><b>Fléchettes</b><span>501, 301, Cricket, Horloge</span></a>
+    <a class="wolf" id="g-wolf" href="#"><b>Loup-Garou Ultimate</b><span>4 à 10 joueurs, la télé est le maître du jeu</span></a>
+    <a class="words" id="g-words" href="#"><b>Le Maître des Mots</b><span>4 à 10 joueurs, deux équipes, un indice</span></a>
+    <a class="impact" id="g-impact" href="#"><b>Impact Arena</b><span>Combat à deux, les téléphones servent de manettes</span></a>
+    <a class="navy" id="g-navy" href="#"><b>Battleship Arena</b><span>Bataille navale à deux ou contre l'IA</span></a>
+    <a class="bts" id="g-bts" href="#"><b>Blind Test Show</b><span>Jeu télévisé musical, buzzers sur les téléphones</span></a>
+  </div>
+</main>
+<script>
+const q=location.search;
+document.getElementById("g-darts").href="/"+q;
+document.getElementById("g-wolf").href="/loup"+q;
+document.getElementById("g-words").href="/mots"+q;
+document.getElementById("g-impact").href="/arena"+(q?q:"?tv");
+document.getElementById("g-navy").href="/bataille"+(q?q:"?tv");
+document.getElementById("g-bts").href="/blind-test-show.html";
+
+const a=[...document.querySelectorAll("a")];a[0].focus();
+document.addEventListener("keydown",e=>{
+  const i=a.indexOf(document.activeElement);
+  const step=e.key==="ArrowRight"?1:e.key==="ArrowLeft"?-1:e.key==="ArrowDown"?2:e.key==="ArrowUp"?-2:0;
+  if(step){a[Math.max(0,Math.min(a.length-1,i+step))].focus();e.preventDefault()}
+});
+</script>
+</body>
+</html>
