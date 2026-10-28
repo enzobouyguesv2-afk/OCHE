@@ -132,7 +132,8 @@ html.tv{font-size:calc(100vw/192)}
 .guide p{font-size:2.1rem;color:var(--w);margin:.6rem 0}
 .neterr{position:absolute;left:0;right:0;bottom:0;background:var(--r);color:#fff;font-size:1.8rem;padding:1rem 2rem;text-align:center;z-index:20}
 /* ---------------- TÉLÉPHONE ---------------- */
-html.pad,html.pad body{height:100%;overflow:hidden;overscroll-behavior:none;touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+html.pad,html.pad body{height:100%;overflow:hidden;overscroll-behavior:none;touch-action:manipulation;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+html.pad body{position:fixed;inset:0;width:100%}
 .pad #cv{display:none}
 .pad #ui{position:fixed;inset:0;overflow-y:auto}
 .ph{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--a);border-bottom:4px solid var(--c)}
@@ -1659,7 +1660,7 @@ function startPad() {
 
   /* ---------- rendu des écrans ---------- */
   let last = "";
-  function paint(h) { if (h === last) return; last = h; root.innerHTML = h; bind(); if (document.getElementById("pad")) layoutPad(); }
+  function paint(h) { if (h === last) return; last = h; if (touches.size) dropStale(); root.innerHTML = h; bind(); if (document.getElementById("pad")) layoutPad(); }
   function render() {
     if (codeEdit || !room) return paint(codeHTML());
     if (!online) return paint(msg("Connexion à la télé…", "Vérifiez que le téléphone est sur le même Wi-Fi que la télé.", true));
@@ -1717,7 +1718,7 @@ function startPad() {
   function padHTML() {
     const cid = S.cid, c = IA.CHARS[cid] || IA.CHARS.titan;
     return `<div id="pad" class="padwrap" style="--c:${COL[S.seat]}">
-  <header class="pbar"><b>J${S.seat + 1}</b><span class="nm">${c.name}</span><i class="hp"><em id="hpbar" style="width:${S.hp}%"></em></i><i class="spg"><em id="spbar" style="width:${S.sp}%"></em></i><button class="mini" id="pause">II</button><button class="mini" id="guide">?</button></header>
+  <header class="pbar"><b>J${S.seat + 1}</b><span class="nm">${c.name}</span><i class="hp"><em id="hpbar"></em></i><i class="spg"><em id="spbar"></em></i><button class="mini" id="pause">II</button><button class="mini" id="guide">?</button></header>
   <div class="jzone" id="jz"><div class="jbase"><div class="knob"></div><span class="ju">SAUT</span><span class="jd">BAS</span></div></div>
   <div class="bzone" id="bz">${BTN.map(([k, l, , , , cls]) => `<div class="btn ${cls}" data-k="${k}"><span>${l}</span></div>`).join("")}</div>
   <div class="hitflash" id="hf"></div>
@@ -1757,10 +1758,28 @@ function startPad() {
   }
   function press(z) { const bit = B[z.k]; if (!(held & bit)) { held |= bit; latch |= bit; z.el.classList.add("on"); vib(8); } }
   function unpress(k) { const bit = B[k]; let still = false; touches.forEach(t => { if (t.kind === "b" && t.k === k) still = true; }); if (!still) { held &= ~bit; const z = zones.b.find(q => q.k === k); if (z) z.el.classList.remove("on"); } }
+  /* Un contact « principal » signifie qu'aucun autre doigt n'est posé : tout appui encore mémorisé est fantôme
+     (l'iPhone n'a pas signalé le lever du doigt). On le relâche avant de traiter le nouvel appui. */
+  function dropStale() {
+    if (!touches.size) return;
+    touches.clear();
+    held = 0; latch = 0; jx = 0; jy = 0;
+    document.querySelectorAll(".btn.on").forEach(b => b.classList.remove("on"));
+    const kn = document.querySelector(".knob"); if (kn) kn.style.transform = "";
+    const base = document.querySelector(".jbase"); if (base) base.classList.remove("act");
+  }
+  /* positions réelles des boutons à l'instant de l'appui (la barre de Safari ou un léger défilement peuvent les déplacer) */
+  function measureZones() {
+    const jz = document.getElementById("jz"); if (!zones || !jz) return;
+    zones.j = jz.getBoundingClientRect();
+    zones.b.forEach(z => { const r = z.el.getBoundingClientRect(); if (r.width) { z.x = r.left + r.width / 2; z.y = r.top + r.height / 2; z.r = r.width / 2; } });
+  }
   function onDown(e) {
     if (!zones || !S || S.screen !== "fight") return;
     e.preventDefault();
     tryFullscreen();
+    if (e.isPrimary) dropStale();
+    measureZones();
     const x = e.clientX, y = e.clientY;
     if (x < zones.j.right && y > zones.j.top && ![...touches.values()].some(t => t.kind === "j")) {
       touches.set(e.pointerId, { kind: "j", ox: x, oy: y });
@@ -1799,6 +1818,13 @@ function startPad() {
   document.addEventListener("pointermove", onMove, { passive: false });
   document.addEventListener("pointerup", onUp, { passive: false });
   document.addEventListener("pointercancel", onUp, { passive: false });
+  document.addEventListener("lostpointercapture", onUp, { passive: false });
+  /* plus aucun doigt sur l'écran : tout est relâché, même si un « lever » s'est perdu */
+  ["touchend", "touchcancel"].forEach(ev => document.addEventListener(ev, e => { if (e.touches && e.touches.length === 0 && touches.size) { dropStale(); pushInput(); } }, { passive: true }));
+  /* la page ne doit jamais défiler pendant un match */
+  window.addEventListener("scroll", () => { if (document.getElementById("pad") && (window.scrollX || window.scrollY)) window.scrollTo(0, 0); }, { passive: true });
+  if (window.visualViewport) ["resize", "scroll"].forEach(ev => window.visualViewport.addEventListener(ev, () => setTimeout(layoutPad, 60)));
+  window.addEventListener("orientationchange", () => setTimeout(layoutPad, 300));
   ["touchstart", "touchmove"].forEach(ev => document.addEventListener(ev, e => { if (e.target.closest && e.target.closest("#pad") && !e.target.closest("button")) e.preventDefault(); }, { passive: false }));
   document.addEventListener("gesturestart", e => e.preventDefault());
   document.addEventListener("dblclick", e => e.preventDefault());
