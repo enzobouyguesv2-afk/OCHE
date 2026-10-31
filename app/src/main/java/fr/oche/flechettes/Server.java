@@ -78,7 +78,7 @@ class Server extends Thread {
     /* BLIND TEST SHOW : relais WebSocket par salle (/bts-ws). La page de la télé est l'arbitre ; le relais ne fait que transmettre. */
     static final class BtsConn {
         final WsConn ws; final String room, id; final boolean tv;
-        long winStart = 0; int winCount = 0;
+        long winStart = 0; int winCount = 0; int max = 8192;
         BtsConn(WsConn ws, String room, String id, boolean tv) { this.ws = ws; this.room = room; this.id = id; this.tv = tv; }
     }
     private final Object btsLock = new Object();
@@ -269,7 +269,12 @@ class Server extends Thread {
                 return;
             }
             if (path.equals("/bts-ws") && method.equals("GET") && wsKey != null && upgrade != null && upgrade.equalsIgnoreCase("websocket")) {
-                btsRelay(sock, in, sock.getOutputStream(), wsKey, local, query);
+                btsRelay(sock, in, sock.getOutputStream(), wsKey, local, query, "", 8192);
+                return;
+            }
+            if (path.equals("/qs-ws") && method.equals("GET") && wsKey != null && upgrade != null && upgrade.equalsIgnoreCase("websocket")) {
+                // QUIZ SHOW : même relais que le Blind Test, salles séparées
+                btsRelay(sock, in, sock.getOutputStream(), wsKey, local, query, "QS:", 8192);
                 return;
             }
 
@@ -360,6 +365,18 @@ class Server extends Thread {
                 case "/blind-test-show.html":
                 case "/blindtest":
                     send(out, 200, "text/html; charset=utf-8", local ? btsPage() : asset("blind-test-show.html"));
+                    break;
+                case "/quiz-show":
+                case "/quiz-show.html":
+                    send(out, 200, "text/html; charset=utf-8", local ? qsPage() : asset("quiz-show.html"));
+                    break;
+                case "/qs-engine.js":
+                    send(out, 200, "application/javascript; charset=utf-8", asset("qs-engine.txt"));
+                    break;
+                case "/qs-questions.js":
+                    // la banque contient les réponses : réservée à la télé elle-même
+                    if (!local) { send(out, 403, "text/plain", bytes("forbidden")); return; }
+                    send(out, 200, "application/javascript; charset=utf-8", asset("qs-questions.txt"));
                     break;
                 case "/bataille":
                     send(out, 200, "text/html; charset=utf-8", asset("bataille.html"));
@@ -456,6 +473,18 @@ class Server extends Thread {
         return html.getBytes(StandardCharsets.UTF_8);
     }
 
+    /** Page QUIZ SHOW pour la télé : rôle « télé », adresse pour le QR code et relais local. */
+    private byte[] qsPage() throws IOException {
+        String html = new String(asset("quiz-show.html"), StandardCharsets.UTF_8);
+        String ip = lanIp();
+        StringBuilder js = new StringBuilder("<script>window.QS_HOST={tv:true,");
+        if (ip != null) js.append("publicUrl:'http://").append(ip).append(':').append(port).append("/quiz-show',");
+        js.append("wsUrl:'ws://127.0.0.1:").append(port).append("/qs-ws'};</script>");
+        int h = html.indexOf("<head>");
+        html = h < 0 ? js + html : html.substring(0, h + 6) + js + html.substring(h + 6);
+        return html.getBytes(StandardCharsets.UTF_8);
+    }
+
     /** Adresse de la télé sur le Wi-Fi (pour le QR code des téléphones). */
     static String lanIp() {
         String other = null;
@@ -480,10 +509,11 @@ class Server extends Thread {
      *  - un message adressé à un joueur (« to ») ne part qu'à ce joueur : les autres téléphones ne le voient pas ;
      *  - taille et débit limités, nombre de salles et de connexions limité.
      */
-    private void btsRelay(Socket sock, InputStream in, OutputStream out, String key, boolean local, String query) throws Exception {
+    private void btsRelay(Socket sock, InputStream in, OutputStream out, String key, boolean local, String query, String ns, int phoneMax) throws Exception {
         String room = param(query, "room"), id = param(query, "id"), role = param(query, "role");
         room = room == null ? "" : room.toUpperCase();
         if (room.length() > 12) room = room.substring(0, 12);
+        if (!room.isEmpty()) room = ns + room;
         boolean tv = "tv".equals(role) || "tv".equals(id);
         if (room.isEmpty() || id == null || id.isEmpty() || id.length() > 40 || (tv && !local)) { send(out, 403, "text/plain", bytes("forbidden")); return; }
         MessageDigest sha = MessageDigest.getInstance("SHA-1");
@@ -493,6 +523,7 @@ class Server extends Thread {
         sock.setSoTimeout(local ? 0 : 60000);
         try { sock.setTcpNoDelay(true); } catch (Exception ignored) { }
         BtsConn c = new BtsConn(new WsConn(sock, out, 0, tv), room, id, tv);
+        c.max = phoneMax;
         List<BtsConn> replaced = new ArrayList<>();
         synchronized (btsLock) {
             List<BtsConn> list = btsRooms.get(room);
@@ -554,7 +585,7 @@ class Server extends Thread {
         if (!c.tv) {                                    // un téléphone : au plus 40 messages par seconde
             if (now - c.winStart > 1000) { c.winStart = now; c.winCount = 0; }
             if (++c.winCount > 40) return;
-            if (text.length() > 8192) return;
+            if (text.length() > c.max) return;
         }
         java.util.regex.Matcher f = BTS_FROM.matcher(text);
         if (!f.find() || !f.group(1).equals(c.id)) return;          // expéditeur usurpé : ignoré
