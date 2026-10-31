@@ -1,0 +1,563 @@
+/* QUIZ SHOW — moteur de jeu (autorité de la partie). Tourne sur la télé, dans l'appli Soirée Jeux.
+   Les téléphones n'envoient que des actions (vote, réponse, joker). Ce moteur décide seul des points,
+   du chrono, des jokers et de la finale. La bonne réponse ne quitte jamais la télé avant la révélation.
+   Toutes les fonctions qui dépendent du temps reçoivent « now » (ms). Servi sous /qs-engine.js. */
+(function (root, factory) {
+  const M = factory();
+  if (typeof module === "object" && module.exports) module.exports = M; else root.QS = M;
+})(typeof self !== "undefined" ? self : this, function () {
+  "use strict";
+
+  const DEFAULT_CONFIG = {
+    mode: "solo", teams: 2, rounds: 3, perRound: 6, answerSec: 20, finalSec: 15, finalCount: 7,
+    catMode: "vote", catCount: 6, voteSec: 30, difficulty: "progressive", maxPlayers: 8,
+    jokers: { fifty: true, double: true, steal: true }, finale: true,
+    sound: true, music: true, volume: 70, anim: true, revealSec: 8
+  };
+  const JOKERS = { fifty: { name: "50/50", icon: "½" }, double: { name: "Double points", icon: "×2" }, steal: { name: "Vol de points", icon: "🦹" } };
+  const TEAM_PRESETS = [
+    { id: "T1", name: "Les Éclairs", color: "#38bdf8" },
+    { id: "T2", name: "Les Comètes", color: "#f472b6" },
+    { id: "T3", name: "Les Lynx", color: "#facc15" },
+    { id: "T4", name: "Les Titans", color: "#4ade80" }
+  ];
+  const COLORS = ["#38bdf8", "#f472b6", "#facc15", "#4ade80", "#a78bfa", "#fb923c", "#22d3ee", "#f87171", "#c084fc", "#a3e635"];
+  const AVATARS = ["🦊", "🐼", "🦉", "🐯", "🐸", "🦄", "🐙", "🦖", "👽", "🤖", "👑", "🚀", "🎩", "🔥", "🎧", "🍕", "🌶️", "🐝", "🦁", "🧠"];
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const uid = (rng, p) => (p || "") + Math.floor(rng() * 36 ** 6).toString(36).padStart(6, "0") + Math.floor(rng() * 36 ** 3).toString(36);
+  function shuffle(a, rng) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+  function clean(s, max) { return String(s == null ? "" : s).replace(/[\u0000-\u001f\u007f<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max); }
+
+  /* ---------- Réponses écrites ---------- */
+  function compact(s) {
+    return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/œ/g, "oe").replace(/æ/g, "ae")
+      .replace(/₂/g, "2").replace(/[^a-z0-9]+/g, "");
+  }
+  function noArticle(s) {
+    const w = String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9' ]+/g, " ").trim();
+    const m = w.match(/^(le|la|les|l'|un|une|the)\s*(.+)$/); return m && m[2].length >= 3 ? compact(m[2]) : null;
+  }
+  function dist(a, b, max) {
+    if (a === b) return 0; if (Math.abs(a.length - b.length) > max) return max + 1;
+    let pp = null, p = Array.from({ length: b.length + 1 }, (_, i) => i), c;
+    for (let i = 1; i <= a.length; i++) {
+      c = [i]; let best = i;
+      for (let j = 1; j <= b.length; j++) {
+        c[j] = Math.min(p[j] + 1, c[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if (pp && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) c[j] = Math.min(c[j], pp[j - 2] + 1);
+        if (c[j] < best) best = c[j];
+      }
+      if (best > max) return max + 1; pp = p; p = c;
+    }
+    return p[b.length];
+  }
+  // Tolérance : aucune faute sous 5 caractères, une jusqu'à 9, deux au-delà. Casse, accents, espaces et ponctuation ignorés.
+  function checkText(answer, q) {
+    const a = compact(answer); if (!a) return false;
+    const targets = new Set();
+    [q.answer].concat(q.aliases || []).forEach(t => { const c = compact(t); if (c) targets.add(c); const n = noArticle(t); if (n) targets.add(n); });
+    const na = noArticle(answer);
+    for (const t of targets) {
+      if (a === t || na === t) return true;
+      const tol = t.length < 5 ? 0 : t.length < 10 ? 1 : 2;
+      if (tol && dist(a, t, tol) <= tol) return true;
+    }
+    return false;
+  }
+
+  /* ---------- Le jeu ---------- */
+  class Game {
+    constructor(opts) {
+      opts = opts || {};
+      this.rng = opts.rng || Math.random;
+      this.bank = opts.bank || { cats: [], questions: [] };
+      this.byId = {}; this.bank.questions.forEach(q => this.byId[q.id] = q);
+      this.st = Game.fresh(opts.room || "");
+      this.applyConfig(opts.config || {});
+    }
+    static fresh(room) {
+      return {
+        v: 1, room, phase: "lobby", paused: false, pauseAt: 0, pauseWhy: "", config: JSON.parse(JSON.stringify(DEFAULT_CONFIG)),
+        players: {}, order: [], teams: TEAM_PRESETS.slice(0, 2).map(t => Object.assign({}, t, { score: 0, finalScore: 0, jokers: {}, stats: { ok: 0, ko: 0 } })),
+        votes: {}, themeUntil: 0, tvCats: [], cats: [], plan: [], round: 0, idx: -1, qno: 0, used: [], sessionUsed: [],
+        cur: null, last: null, finalists: [], finalIdx: -1, sd: 0, champion: null, phaseUntil: 0, events: [], seq: 0, gameNo: 0, error: "", history: []
+      };
+    }
+    get S() { return this.st; }
+    bump() { this.st.seq++; }
+    ev(k, txt, now, extra) { this.st.events.push(Object.assign({ k, txt, at: now || 0 }, extra || {})); if (this.st.events.length > 30) this.st.events.shift(); this.bump(); }
+    cats() { return this.bank.cats; }
+    cat(id) { return this.bank.cats.find(c => c.id === id) || { id, name: id, icon: "❓", color: "#888" }; }
+
+    /* ----- Réglages (organisateur, à la télé) ----- */
+    applyConfig(n) {
+      const C = this.st.config; n = n || {};
+      if (["solo", "equipes"].includes(n.mode)) C.mode = n.mode;
+      const num = (k, a, b) => { if (n[k] !== undefined && Number.isFinite(+n[k])) C[k] = clamp(Math.round(+n[k]), a, b); };
+      num("teams", 2, 4); num("rounds", 1, 5); num("perRound", 3, 10); num("answerSec", 10, 40); num("finalSec", 10, 30);
+      num("finalCount", 3, 10); num("catCount", 3, 12); num("voteSec", 15, 60); num("maxPlayers", 2, 8); num("volume", 0, 100); num("revealSec", 4, 15);
+      if (["vote", "tele", "hasard"].includes(n.catMode)) C.catMode = n.catMode;
+      if (["progressive", "facile", "difficile"].includes(n.difficulty)) C.difficulty = n.difficulty;
+      ["finale", "sound", "music", "anim"].forEach(k => { if (typeof n[k] === "boolean") C[k] = n[k]; });
+      if (n.jokers && typeof n.jokers === "object") Object.keys(JOKERS).forEach(k => { if (typeof n.jokers[k] === "boolean") C.jokers[k] = n.jokers[k]; });
+      if (n.teams !== undefined || n.mode !== undefined) this.setTeams(C.teams);
+      this.bump();
+    }
+    setTeams(n) {
+      const S = this.st; n = clamp(Math.round(n) || 2, 2, 4);
+      S.teams = TEAM_PRESETS.slice(0, n).map(t => { const o = (S.teams || []).find(x => x.id === t.id); return Object.assign({ score: 0, finalScore: 0, jokers: {}, stats: { ok: 0, ko: 0 } }, o || {}, t); });
+      Object.values(S.players).forEach(p => { if (p.team && !S.teams.some(t => t.id === p.team)) p.team = null; });
+      if (S.config.mode === "equipes") this.activePlayers().forEach(p => { if (!p.team) p.team = this.smallestTeam(); });
+    }
+    smallestTeam() { const S = this.st; const c = S.teams.map(t => ({ t, n: this.activePlayers().filter(p => p.team === t.id).length })).sort((a, b) => a.n - b.n); return c.length ? c[0].t.id : null; }
+
+    /* ----- Joueurs ----- */
+    activePlayers() { return this.st.order.map(id => this.st.players[id]).filter(Boolean); }
+    teamMode() { return this.st.config.mode === "equipes"; }
+    join(pid, name, avatar, now) {
+      const S = this.st; pid = clean(pid, 40); if (!pid) return { ok: false, reason: "id" };
+      name = clean(name, 16) || "Joueur"; avatar = AVATARS.includes(avatar) ? avatar : null;
+      let p = S.players[pid];
+      if (p) {
+        p.online = true; p.lastSeen = now;
+        if (S.phase === "lobby") { if (name !== p.name) p.name = this.uniqueName(name, pid); if (avatar) p.avatar = avatar; }
+        this.bump(); return { ok: true, back: true };
+      }
+      if (this.activePlayers().length >= S.config.maxPlayers) return { ok: false, reason: "pleine" };
+      const used = this.activePlayers().map(x => x.color);
+      const usedAv = this.activePlayers().map(x => x.avatar), freeAv = AVATARS.filter(a => !usedAv.includes(a));
+      p = S.players[pid] = { id: pid, name: this.uniqueName(name, pid), avatar: avatar || (freeAv.length ? freeAv : AVATARS)[Math.floor(this.rng() * (freeAv.length || AVATARS.length))], color: COLORS.find(c => !used.includes(c)) || COLORS[0],
+        team: null, online: true, lastSeen: now, joinedAt: now, score: 0, finalScore: 0, jokers: {}, stats: { ok: 0, ko: 0, times: [], streak: 0, best: 0 } };
+      S.order.push(pid);
+      if (this.teamMode()) p.team = this.smallestTeam();
+      this.ev("join", p.name, now, { pid });
+      return { ok: true, back: false };
+    }
+    uniqueName(name, pid) {
+      const taken = new Set(this.activePlayers().filter(p => p.id !== pid).map(p => p.name.toLowerCase()));
+      if (!taken.has(name.toLowerCase())) return name;
+      for (let i = 2; i < 50; i++) { const n = name.slice(0, 13) + " " + i; if (!taken.has(n.toLowerCase())) return n; }
+      return name;
+    }
+    seen(pid, now) { const p = this.st.players[pid]; if (p) { if (!p.online) { p.online = true; this.bump(); } p.lastSeen = now; } }
+    offline(pid) { const p = this.st.players[pid]; if (p && p.online) { p.online = false; this.bump(); } }
+    kick(pid, now) {
+      const S = this.st, p = S.players[pid]; if (!p) return false;
+      delete S.players[pid]; S.order = S.order.filter(x => x !== pid); delete S.votes[pid];
+      if (S.cur && S.cur.answers[pid]) delete S.cur.answers[pid];
+      this.ev("info", p.name + " a été exclu", now); return true;
+    }
+    setTeam(pid, team) { const S = this.st, p = S.players[pid]; if (!p || S.phase !== "lobby" || !S.teams.some(t => t.id === team)) return false; p.team = team; this.bump(); return true; }
+
+    /* ----- Concurrents : joueurs (mode individuel) ou équipes ----- */
+    competitors() {
+      const S = this.st;
+      if (this.teamMode()) return S.teams.filter(t => this.activePlayers().some(p => p.team === t.id)).map(t => t.id);
+      return this.activePlayers().map(p => p.id);
+    }
+    cidOf(pid) { const p = this.st.players[pid]; return !p ? null : this.teamMode() ? p.team : pid; }
+    comp(cid) { const S = this.st; return this.teamMode() ? S.teams.find(t => t.id === cid) : S.players[cid]; }
+    compName(cid) { const c = this.comp(cid); return c ? c.name : "?"; }
+    compOnline(cid) { return this.teamMode() ? this.activePlayers().some(p => p.team === cid && p.online) : !!(this.st.players[cid] && this.st.players[cid].online); }
+    canStart() {
+      const S = this.st, ps = this.activePlayers().filter(p => p.online);
+      if (ps.length < 2) return { ok: false, why: "Il faut au moins 2 joueurs connectés." };
+      if (this.teamMode() && S.teams.filter(t => ps.some(p => p.team === t.id)).length < 2) return { ok: false, why: "Il faut au moins 2 équipes avec des joueurs." };
+      if (!this.bank.questions.length) return { ok: false, why: "Banque de questions introuvable." };
+      return { ok: true };
+    }
+
+    /* ----- Déroulement ----- */
+    start(now) {
+      const S = this.st, C = S.config, chk = this.canStart();
+      if (!chk.ok) { S.error = chk.why; this.bump(); return chk; }
+      S.error = ""; S.gameNo++; S.events = [];
+      this.activePlayers().forEach(p => { p.score = 0; p.finalScore = 0; p.jokers = {}; p.stats = { ok: 0, ko: 0, times: [], streak: 0, best: 0 }; });
+      S.teams.forEach(t => { t.score = 0; t.finalScore = 0; t.jokers = {}; t.stats = { ok: 0, ko: 0 }; });
+      S.votes = {}; S.cats = []; S.plan = []; S.round = 0; S.idx = -1; S.qno = 0; S.used = []; S.cur = null; S.last = null; S.finalists = []; S.finalIdx = -1; S.sd = 0; S.champion = null; S.history = [];
+      S.paused = false;
+      if (C.catMode === "hasard") { this.chooseCats(); this.roundIntro(now); }
+      else { S.phase = "themes"; S.themeUntil = C.catMode === "vote" ? now + C.voteSec * 1000 : 0; if (C.catMode === "tele" && !S.tvCats.length) S.tvCats = []; this.bump(); }
+      this.ev("info", "La partie commence !", now);
+      return { ok: true };
+    }
+    vote(pid, cats, done, now) {
+      const S = this.st; if (S.phase !== "themes" || S.config.catMode !== "vote") return { ok: false, reason: "ferme" };
+      const ids = this.cats().map(c => c.id);
+      const v = [...new Set((Array.isArray(cats) ? cats : []).filter(c => ids.includes(c)))].slice(0, 3);
+      S.votes[pid] = { cats: v, done: !!done }; this.bump();
+      const ps = this.activePlayers().filter(p => p.online);
+      if (ps.length && ps.every(p => S.votes[p.id] && S.votes[p.id].done)) this.endThemes(now);
+      return { ok: true };
+    }
+    tvToggleCat(id) { const S = this.st; if (S.phase !== "themes") return; const i = S.tvCats.indexOf(id); if (i >= 0) S.tvCats.splice(i, 1); else S.tvCats.push(id); this.bump(); }
+    voteCounts() { const c = {}; Object.values(this.st.votes).forEach(v => v.cats.forEach(id => c[id] = (c[id] || 0) + 1)); return c; }
+    chooseCats() {
+      const S = this.st, C = S.config, all = this.cats().map(c => c.id);
+      let chosen = [];
+      if (C.catMode === "tele" && S.tvCats.length) chosen = S.tvCats.slice(0, 12);
+      else if (C.catMode === "vote") {
+        const cnt = this.voteCounts();
+        const order = shuffle(all, this.rng).sort((a, b) => (cnt[b] || 0) - (cnt[a] || 0));  // égalités départagées au hasard
+        chosen = order.filter(id => cnt[id]).slice(0, C.catCount);
+      }
+      if (C.catMode === "tele" && chosen.length) { S.cats = chosen; this.buildPlan(); return; }
+      // compléter au hasard jusqu'au nombre de thèmes voulu
+      for (const id of shuffle(all, this.rng)) { if (chosen.length >= C.catCount) break; if (!chosen.includes(id)) chosen.push(id); }
+      S.cats = chosen; this.buildPlan();
+    }
+    endThemes(now) { const S = this.st; if (S.phase !== "themes") return; this.chooseCats(); this.roundIntro(now); }
+    /* Plan des manches : difficulté progressive sur l'ensemble de la partie, thèmes en alternance, aucune question répétée. */
+    buildPlan() {
+      const S = this.st, C = S.config, n = C.perRound, R = C.rounds, total = R * n;
+      const avoid = new Set(S.sessionUsed.slice(-400));
+      const taken = new Set();
+      const catOrder = shuffle(S.cats, this.rng);
+      S.plan = [];
+      for (let r = 0; r < R; r++) {
+        const round = [];
+        for (let i = 0; i < n; i++) {
+          const k = r * n + i;
+          let d = total > 1 ? 1 + 2 * k / (total - 1) : 2;
+          if (C.difficulty === "facile") d = 1 + (d - 1) * 0.5;
+          if (C.difficulty === "difficile") d = 2 + (d - 1) * 0.5;
+          d = clamp(Math.round(d), 1, 3);
+          const q = this.pickQuestion(catOrder[k % catOrder.length], d, taken, avoid, false);
+          if (q) { round.push(q.id); taken.add(q.id); }
+        }
+        // ordre croissant de difficulté dans la manche
+        round.sort((a, b) => this.byId[a].diff - this.byId[b].diff);
+        S.plan.push(round);
+      }
+      S.used = [...taken];
+    }
+    pickQuestion(cat, d, taken, avoid, final) {
+      const Qs = this.bank.questions.filter(q => !taken.has(q.id));
+      const tiers = [
+        q => q.cat === cat && q.diff === d && !avoid.has(q.id),
+        q => S_IN(this.st.cats, q.cat) && q.diff === d && !avoid.has(q.id),
+        q => q.cat === cat && Math.abs(q.diff - d) === 1 && !avoid.has(q.id),
+        q => S_IN(this.st.cats, q.cat) && Math.abs(q.diff - d) <= 1 && !avoid.has(q.id),
+        q => S_IN(this.st.cats, q.cat),
+        q => q.diff >= (final ? 2 : 1),
+        q => true
+      ];
+      for (const f of tiers) { const c = Qs.filter(f); if (c.length) return c[Math.floor(this.rng() * c.length)]; }
+      return null;
+    }
+    roundIntro(now) {
+      const S = this.st; S.phase = "roundIntro"; S.idx = -1; S.phaseUntil = now + 4500; this.bump();
+    }
+    /* Prépare une question : mélange des propositions (la bonne réponse change de place). */
+    prepare(qid, now, opts) {
+      const S = this.st, C = S.config, q = this.byId[qid];
+      let order = null, correct = -1;
+      if (q.type === "qcm" || q.type === "rapide") { order = shuffle([0, 1, 2, 3], this.rng); correct = order.indexOf(q.answer); }
+      else if (q.type === "vf") { order = [0, 1]; correct = q.answer; }
+      const dur = (opts.final ? C.finalSec : (q.type === "texte" ? C.answerSec + 5 : q.type === "rapide" ? Math.max(10, C.answerSec - 5) : C.answerSec)) * 1000;
+      S.cur = { uid: uid(this.rng, "q"), qid, final: !!opts.final, sd: !!opts.sd, n: opts.n, total: opts.total, round: S.round, order, correct, dur, acc: 0, since: now + 1800, readUntil: now + 1800,
+        answers: {}, jokers: {}, removed: {}, startedAt: now };
+      S.phase = opts.final ? "fquestion" : "question";
+      this.bump();
+    }
+    nextQuestion(now) {
+      const S = this.st, plan = S.plan[S.round] || [];
+      S.idx++;
+      if (S.idx >= plan.length) return this.endRound(now);
+      S.qno++;
+      this.prepare(plan[S.idx], now, { n: S.idx + 1, total: plan.length });
+    }
+    endRound(now) {
+      const S = this.st; S.phase = "scores"; S.phaseUntil = now + 9000; S.cur = null; this.bump();
+    }
+    afterScores(now) {
+      const S = this.st, C = S.config;
+      S.round++;
+      if (S.round < C.rounds && (S.plan[S.round] || []).length) return this.roundIntro(now);
+      if (C.finale && this.competitors().length >= 2) return this.startFinal(now);
+      return this.finish(now);
+    }
+    ranking() {
+      const S = this.st;
+      return this.competitors().map(cid => { const c = this.comp(cid); return { cid, name: c.name, score: c.score, ok: c.stats.ok, color: c.color, avatar: c.avatar || "👥", joinedAt: c.joinedAt || 0 }; })
+        .sort((a, b) => b.score - a.score || b.ok - a.ok || a.joinedAt - b.joinedAt).map((r, i) => Object.assign(r, { rank: i + 1 }));
+    }
+    startFinal(now) {
+      const S = this.st, C = S.config;
+      S.finalists = this.ranking().slice(0, 2).map(r => r.cid);
+      S.finalists.forEach(cid => { this.comp(cid).finalScore = 0; });
+      // questions de finale : difficiles, dans les thèmes de la partie si possible
+      const taken = new Set(S.used), avoid = new Set(S.sessionUsed.slice(-400)), list = [];
+      const cats = shuffle(S.cats, this.rng);
+      for (let i = 0; i < C.finalCount; i++) { const q = this.pickQuestion(cats[i % cats.length], 3, taken, avoid, true); if (q) { list.push(q.id); taken.add(q.id); } }
+      S.finalPlan = list; S.used = [...taken]; S.finalIdx = -1; S.sd = 0;
+      S.phase = "finalIntro"; S.phaseUntil = now + 9000; S.cur = null;
+      this.ev("info", "Finale : " + S.finalists.map(c => this.compName(c)).join(" contre "), now);
+    }
+    nextFinal(now) {
+      const S = this.st, C = S.config;
+      S.finalIdx++;
+      if (S.finalIdx < S.finalPlan.length) { S.qno++; return this.prepare(S.finalPlan[S.finalIdx], now, { final: true, n: S.finalIdx + 1, total: S.finalPlan.length }); }
+      const [a, b] = S.finalists, sa = this.comp(a).finalScore, sb = this.comp(b).finalScore;
+      if (sa !== sb) { S.champion = sa > sb ? a : b; return this.finish(now); }
+      // égalité : mort subite
+      S.sd++;
+      if (S.sd > 10) { S.champion = this.comp(a).score >= this.comp(b).score ? a : b; return this.finish(now); }
+      const taken = new Set(S.used), q = this.pickQuestion(S.cats[Math.floor(this.rng() * S.cats.length)], 3, taken, new Set(), true);
+      if (!q) { S.champion = a; return this.finish(now); }
+      S.used.push(q.id); S.qno++;
+      this.ev("info", "Égalité ! Question de mort subite", now);
+      this.prepare(q.id, now, { final: true, sd: true, n: S.sd, total: 0 });
+    }
+    elapsed(now) { const c = this.st.cur; if (!c) return 0; if (this.st.paused) now = Math.min(now, this.st.pauseAt); return c.acc + (c.since && now > c.since ? now - c.since : 0); }
+    remaining(now) { const c = this.st.cur; return c ? Math.max(0, c.dur - this.elapsed(now)) : 0; }
+    pause(now, why) { const S = this.st; if (S.paused || ["lobby", "victory"].includes(S.phase)) return false; S.paused = true; S.pauseAt = now; S.pauseWhy = why || ""; this.bump(); return true; }
+    resume(now) {
+      const S = this.st; if (!S.paused) return false;
+      const d = Math.max(0, now - S.pauseAt); S.paused = false; S.pauseWhy = "";
+      const c = S.cur; if (c) { if (c.since) c.since += d; if (c.readUntil) c.readUntil += d; }
+      if (S.phaseUntil) S.phaseUntil += d; if (S.themeUntil) S.themeUntil += d;
+      this.bump(); return true;
+    }
+    tick(now) {
+      const S = this.st, before = S.seq;
+      if (S.paused) return false;
+      switch (S.phase) {
+        case "themes": if (S.themeUntil && now >= S.themeUntil) this.endThemes(now); break;
+        case "roundIntro": if (now >= S.phaseUntil) this.nextQuestion(now); break;
+        case "question": case "fquestion":
+          if (S.cur && this.elapsed(now) >= S.cur.dur) this.reveal(now, "temps"); break;
+        case "reveal": if (now >= S.phaseUntil) this.nextQuestion(now); break;
+        case "scores": if (now >= S.phaseUntil) this.afterScores(now); break;
+        case "finalIntro": if (now >= S.phaseUntil) this.nextFinal(now); break;
+        case "freveal": if (now >= S.phaseUntil) { if (S.champion) this.finish(now); else this.nextFinal(now); } break;
+      }
+      return S.seq !== before;
+    }
+    /* Passer sans attendre (télécommande / organisateur). */
+    advance(now) {
+      const S = this.st;
+      if (S.phase === "themes") { this.endThemes(now); return true; }
+      if (["roundIntro", "reveal", "scores", "finalIntro", "freveal"].includes(S.phase)) { S.phaseUntil = now; this.tick(now); return true; }
+      return false;
+    }
+    /* Qui peut répondre ? */
+    eligible(pid) {
+      const S = this.st, c = S.cur, p = S.players[pid];
+      if (!p || !c) return "inconnu";
+      if (c.final && !S.finalists.includes(this.cidOf(pid))) return "spectateur";
+      if (this.teamMode() && !p.team) return "equipe";
+      return "";
+    }
+    answer(pid, payload, qu, now) {
+      const S = this.st, c = S.cur;
+      if (!c || qu !== c.uid || !["question", "fquestion"].includes(S.phase)) return { ok: false, reason: "tard" };
+      if (S.paused) return { ok: false, reason: "pause" };
+      const why = this.eligible(pid); if (why) return { ok: false, reason: why };
+      if (now < c.readUntil) return { ok: false, reason: "lecture" };
+      const el = this.elapsed(now); if (el > c.dur) return { ok: false, reason: "tard" };
+      const cid = this.cidOf(pid);
+      if (c.answers[cid]) return { ok: false, reason: "deja" };
+      const q = this.byId[c.qid];
+      let a;
+      if (q.type === "texte") { const t = clean(payload && payload.text, 60); if (!compact(t)) return { ok: false, reason: "vide" }; a = { text: t }; }
+      else { const i = Math.round(+(payload && payload.choice)); if (!(i >= 0 && i < c.order.length)) return { ok: false, reason: "choix" }; a = { choice: i }; }
+      c.answers[cid] = Object.assign(a, { pid, el, at: now });
+      this.bump();
+      // tout le monde a répondu : révélation immédiate
+      const need = (c.final ? S.finalists : this.competitors()).filter(x => this.compOnline(x) || c.answers[x]);
+      if (need.length && need.every(x => c.answers[x])) this.reveal(now, "tous");
+      return { ok: true };
+    }
+    joker(pid, j, target, qu, now) {
+      const S = this.st, C = S.config, c = S.cur;
+      if (!JOKERS[j]) return { ok: false, reason: "joker" };
+      if (!C.jokers[j]) return { ok: false, reason: "desactive" };
+      if (!c || qu !== c.uid || S.phase !== "question") return { ok: false, reason: c && c.final ? "finale" : "tard" };
+      const why = this.eligible(pid); if (why) return { ok: false, reason: why };
+      const cid = this.cidOf(pid), owner = this.comp(cid);
+      if (owner.jokers[j]) return { ok: false, reason: "utilise" };
+      if (c.jokers[cid]) return { ok: false, reason: "un_par_question" };
+      if (c.answers[cid]) return { ok: false, reason: "deja" };
+      const q = this.byId[c.qid];
+      const J = { j, pid };
+      if (j === "fifty") {
+        if (!(q.type === "qcm" || q.type === "rapide")) return { ok: false, reason: "pas_qcm" };
+        const wrong = shuffle([0, 1, 2, 3].filter(i => i !== c.correct), this.rng).slice(0, 2);
+        c.removed[cid] = wrong.sort();
+      }
+      if (j === "steal") {
+        const tg = String(target || "");
+        if (tg === cid || !this.competitors().includes(tg)) return { ok: false, reason: "cible" };
+        if (Object.values(c.jokers).some(x => x.j === "steal" && x.target === tg)) return { ok: false, reason: "cible_prise" };
+        J.target = tg;
+      }
+      c.jokers[cid] = J; owner.jokers[j] = { at: S.qno };
+      this.ev("joker", this.compName(cid) + " joue « " + JOKERS[j].name + " »" + (J.target ? " contre " + this.compName(J.target) : ""), now, { cid, j, target: J.target });
+      return { ok: true, removed: c.removed[cid] || null };
+    }
+    isCorrect(c, a) { const q = this.byId[c.qid]; if (!a) return false; return q.type === "texte" ? checkText(a.text, q) : a.choice === c.correct; }
+    /* Fin de question : points, jokers, classement. */
+    reveal(now, why) {
+      const S = this.st, c = S.cur; if (!c) return;
+      if (c.since && now > c.since) { c.acc += now - c.since; c.since = 0; }
+      const q = this.byId[c.qid];
+      const comps = c.final ? S.finalists.slice() : this.competitors();
+      const res = { uid: c.uid, qid: c.qid, final: c.final, sd: c.sd, correct: c.correct, results: {}, gains: {}, steals: [], doubled: [], counts: c.order ? c.order.map(() => 0) : null, first: null, why };
+      const corrects = [];
+      comps.forEach(cid => {
+        const a = c.answers[cid], ok = this.isCorrect(c, a);
+        res.results[cid] = a ? (ok ? "ok" : "ko") : "none";
+        if (a && res.counts && a.choice !== undefined) res.counts[a.choice]++;
+        if (ok) corrects.push({ cid, el: a.el });
+        const comp = this.comp(cid); if (!comp) return;
+        if (a) { if (ok) comp.stats.ok++; else comp.stats.ko++; }
+        // statistiques individuelles (le joueur qui a répondu)
+        const p = a && S.players[a.pid];
+        if (p && this.teamMode()) { if (ok) p.stats.ok++; else p.stats.ko++; }
+        if (p && ok) { p.stats.times.push(Math.round(a.el)); }
+        if (!this.teamMode() && p) { p.stats.streak = ok ? p.stats.streak + 1 : 0; p.stats.best = Math.max(p.stats.best, p.stats.streak); }
+      });
+      corrects.sort((x, y) => x.el - y.el);
+      res.first = corrects.length ? corrects[0].cid : null;
+      if (c.final) {
+        if (c.sd) { if (res.first) { S.champion = res.first; res.gains[res.first] = 0; } }
+        else corrects.forEach(x => { this.comp(x.cid).finalScore += 3; res.gains[x.cid] = 3; });
+      } else {
+        const raw = {};
+        corrects.forEach((x, k) => {
+          let pts = q.points;
+          if (q.type === "rapide") pts = Math.round(q.points * (0.5 + 0.5 * (1 - x.el / c.dur)) / 10) * 10 + (k === 0 ? 50 : 0);
+          if (c.jokers[x.cid] && c.jokers[x.cid].j === "double") { pts *= 2; res.doubled.push(x.cid); }
+          raw[x.cid] = pts;
+        });
+        const gains = Object.assign({}, raw);
+        // vols : le voleur qui a bien répondu prend les points gagnés par sa cible sur cette question
+        Object.entries(c.jokers).forEach(([cid, J]) => {
+          if (J.j !== "steal") return;
+          const okThief = !!raw[cid], amount = raw[J.target] || 0;
+          if (okThief && amount > 0) { gains[cid] = (gains[cid] || 0) + amount; gains[J.target] = (gains[J.target] || 0) - amount; }
+          res.steals.push({ from: J.target, to: cid, pts: okThief ? amount : 0, ok: okThief && amount > 0 });
+        });
+        Object.entries(gains).forEach(([cid, g]) => { const comp = this.comp(cid); if (comp) comp.score = Math.max(0, comp.score + g); res.gains[cid] = g; });
+        if (this.teamMode()) Object.entries(c.answers).forEach(([cid, a]) => { const p = S.players[a.pid]; if (p && raw[cid]) p.score += raw[cid]; });
+      }
+      res.ranking = c.final ? S.finalists.map(cid => ({ cid, name: this.compName(cid), final: this.comp(cid).finalScore })) : this.ranking();
+      S.last = res;
+      S.history.push({ qid: c.qid, final: c.final, results: res.results });
+      S.sessionUsed.push(c.qid); if (S.sessionUsed.length > 600) S.sessionUsed.shift();
+      S.phase = c.final ? "freveal" : "reveal";
+      S.phaseUntil = now + (c.final ? 6500 : S.config.revealSec * 1000);
+      if (c.sd && !S.champion) S.phaseUntil = now + 5000;
+      this.bump();
+    }
+    /* Annuler une question (problème) : aucun point. */
+    skip(now) {
+      const S = this.st, c = S.cur; if (!c || !["question", "fquestion"].includes(S.phase)) return false;
+      c.answers = {}; c.jokers = {};
+      // les jokers joués sur cette question sont rendus
+      Object.values(S.players).concat(S.teams).forEach(o => Object.keys(o.jokers || {}).forEach(k => { if (o.jokers[k] && o.jokers[k].at === S.qno) delete o.jokers[k]; }));
+      this.reveal(now, "annulee"); S.last.cancelled = true; return true;
+    }
+    finish(now) {
+      const S = this.st;
+      if (!S.champion) S.champion = (this.ranking()[0] || {}).cid || null;
+      const rk = this.ranking();
+      // classement final : champion, finaliste, puis les autres au score
+      const order = [];
+      if (S.champion) order.push(S.champion);
+      S.finalists.forEach(c => { if (!order.includes(c)) order.push(c); });
+      rk.forEach(r => { if (!order.includes(r.cid)) order.push(r.cid); });
+      const all = this.activePlayers();
+      const fast = all.filter(p => p.stats.times.length).map(p => ({ id: p.id, t: Math.min(...p.stats.times) })).sort((a, b) => a.t - b.t)[0] || null;
+      const streak = all.slice().sort((a, b) => (b.stats.best || 0) - (a.stats.best || 0))[0];
+      S.victory = {
+        champion: S.champion, at: now,
+        ranking: order.map((cid, i) => { const c = this.comp(cid); return { cid, rank: i + 1, name: c.name, avatar: c.avatar || "👥", color: c.color, score: c.score, ok: c.stats.ok, ko: c.stats.ko, final: S.finalists.includes(cid) ? c.finalScore : null }; }),
+        stats: { questions: S.history.length, correct: Object.values(S.history).reduce((s, h) => s + Object.values(h.results).filter(r => r === "ok").length, 0), fastest: fast, streak: streak && streak.stats.best > 1 ? { id: streak.id, n: streak.stats.best } : null }
+      };
+      S.phase = "victory"; S.cur = null; S.paused = false;
+      this.ev("final", "Champion : " + this.compName(S.champion), now);
+    }
+    rematch(now) { return this.start(now); }
+    toLobby(now) {
+      const S = this.st; S.phase = "lobby"; S.cur = null; S.last = null; S.victory = null; S.paused = false; S.finalists = []; S.champion = null;
+      this.activePlayers().forEach(p => { p.score = 0; p.finalScore = 0; p.jokers = {}; }); S.teams.forEach(t => { t.score = 0; t.finalScore = 0; t.jokers = {}; });
+      this.ev("info", "Retour au salon", now); return true;
+    }
+
+    /* ----- Messages des téléphones ----- */
+    handle(pid, m, now) {
+      const S = this.st; m = m || {};
+      if (m.type === "hello") return this.join(pid, m.name, m.avatar, now);
+      const p = S.players[pid]; if (!p) return { ok: false, reason: "inconnu", rejoin: true };
+      this.seen(pid, now);
+      switch (m.type) {
+        case "ping": return { ok: true };
+        case "vote": return this.vote(pid, m.cats, m.done, now);
+        case "answer": return this.answer(pid, { choice: m.choice, text: m.text }, m.q, now);
+        case "joker": return this.joker(pid, m.j, m.target, m.q, now);
+        case "team": if (!this.teamMode()) return { ok: false, reason: "mode" }; return { ok: this.setTeam(pid, m.team) };
+        case "profile": if (S.phase !== "lobby") return { ok: false, reason: "ferme" }; if (m.name) p.name = this.uniqueName(clean(m.name, 16) || p.name, pid); if (AVATARS.includes(m.avatar)) p.avatar = m.avatar; this.bump(); return { ok: true };
+      }
+      return { ok: false, reason: "type" };
+    }
+
+    /* ----- Vue filtrée pour un téléphone : jamais la bonne réponse avant la révélation ----- */
+    viewFor(pid, now) {
+      const S = this.st, C = S.config, p = S.players[pid];
+      if (!p) return { phase: "unknown" };
+      const cid = this.cidOf(pid), mine = cid ? this.comp(cid) : null;
+      const rk = ["lobby"].includes(S.phase) ? [] : this.ranking();
+      const v = {
+        phase: S.phase, paused: S.paused, pauseWhy: S.pauseWhy, room: S.room, mode: C.mode, seq: S.seq,
+        me: { id: p.id, name: p.name, avatar: p.avatar, color: p.color, team: p.team, score: mine ? mine.score : 0, rank: (rk.find(r => r.cid === cid) || {}).rank || 0, total: rk.length, ok: p.stats.ok, ko: p.stats.ko },
+        teams: this.teamMode() ? S.teams.map(t => ({ id: t.id, name: t.name, color: t.color, score: t.score })) : [],
+        players: this.activePlayers().map(x => ({ id: x.id, name: x.name, avatar: x.avatar, color: x.color, team: x.team, online: x.online })),
+        ranking: rk.slice(0, 8).map(r => ({ cid: r.cid, name: r.name, score: r.score, rank: r.rank, avatar: r.avatar, color: r.color })),
+        jokersOn: C.jokers, myJokers: mine ? Object.keys(JOKERS).filter(k => C.jokers[k] && !mine.jokers[k]) : [],
+        rounds: C.rounds, round: S.round + 1
+      };
+      if (S.phase === "themes") {
+        v.themes = { mode: C.catMode, cats: this.cats().map(c => ({ id: c.id, name: c.name, icon: c.icon, color: c.color })), mine: (S.votes[pid] || {}).cats || [], done: !!(S.votes[pid] || {}).done, remain: S.themeUntil ? Math.max(0, S.themeUntil - now) : 0 };
+      }
+      if (S.cats.length) v.cats = S.cats.map(id => this.cat(id).name);
+      const c = S.cur;
+      if (c && ["question", "fquestion", "reveal", "freveal"].includes(S.phase)) {
+        const q = this.byId[c.qid], a = c.answers[cid];
+        v.cur = {
+          q: c.uid, type: q.type, cat: { name: this.cat(q.cat).name, icon: this.cat(q.cat).icon, color: this.cat(q.cat).color },
+          n: c.n, total: c.total, final: c.final, sd: c.sd, diff: q.diff, points: c.final ? 3 : q.points,
+          opts: c.order ? c.order.map(i => q.opts[i]) : null,
+          remain: Math.round(this.remaining(now)), dur: c.dur, reading: Math.max(0, c.readUntil - now),
+          answered: !!a, mine: a ? (a.choice !== undefined ? a.choice : a.text) : null, answeredBy: a && this.teamMode() ? (S.players[a.pid] || {}).name : null,
+          why: this.eligible(pid), removed: c.removed[cid] || null, joker: c.jokers[cid] ? c.jokers[cid].j : null,
+          targets: this.competitors().filter(x => x !== cid).map(x => ({ cid: x, name: this.compName(x) })),
+          answeredCount: Object.keys(c.answers).length
+        };
+      }
+      if (["reveal", "freveal"].includes(S.phase) && S.last) {
+        const L = S.last, q = this.byId[L.qid];
+        v.result = { correct: L.correct, correctText: q.type === "texte" ? q.answer : q.opts[q.type === "vf" ? q.answer : q.answer], expl: q.expl, mine: L.results[cid] || "none", gain: L.gains[cid] || 0, cancelled: !!L.cancelled,
+          stolenFrom: L.steals.filter(s => s.to === cid).map(s => ({ name: this.compName(s.from), pts: s.pts, ok: s.ok })), stolenBy: L.steals.filter(s => s.from === cid && s.ok).map(s => ({ name: this.compName(s.to), pts: s.pts })) };
+      }
+      if (S.finalists.length) v.final = { ids: S.finalists, names: S.finalists.map(x => this.compName(x)), scores: S.finalists.map(x => this.comp(x).finalScore), me: S.finalists.includes(cid), sd: S.sd };
+      if (S.phase === "victory" && S.victory) { const V = S.victory; v.victory = { champion: this.compName(V.champion), iWon: V.champion === cid, myRank: (V.ranking.find(r => r.cid === cid) || {}).rank || 0, ranking: V.ranking, stats: V.stats }; }
+      if (S.phase === "roundIntro" || S.phase === "scores") { v.next = S.phase === "scores" ? (S.round + 1 < C.rounds ? "Manche " + (S.round + 2) : C.finale ? "La grande finale" : "Le podium") : "Manche " + (S.round + 1); }
+      return v;
+    }
+    save(now) { this.st.savedAt = now; return JSON.stringify(this.st); }
+    restore(json, now) {
+      let s; try { s = typeof json === "string" ? JSON.parse(json) : json; } catch (e) { return false; }
+      if (!s || s.v !== 1 || !s.players || !s.config) return false;
+      this.st = Object.assign(Game.fresh(s.room), s);
+      this.st.config = Object.assign(JSON.parse(JSON.stringify(DEFAULT_CONFIG)), s.config);
+      Object.values(this.st.players).forEach(p => p.online = false);
+      if (!["lobby", "victory"].includes(this.st.phase) && !this.st.paused) { this.st.paused = true; this.st.pauseAt = s.savedAt || now; this.st.pauseWhy = "restauree"; }
+      this.bump(); return true;
+    }
+  }
+  function S_IN(arr, x) { return arr.includes(x); }
+  return { Game, checkText, compact, DEFAULT_CONFIG, JOKERS, TEAM_PRESETS, AVATARS };
+});
