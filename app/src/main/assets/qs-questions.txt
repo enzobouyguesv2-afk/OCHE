@@ -1,0 +1,258 @@
+/* QUIZ SHOW — banque de questions (rédaction originale). Servie sous /qs-questions.js, uniquement à la télé :
+   les téléphones ne reçoivent jamais les réponses.
+   Format d'une question : [identifiant, type, difficulté, énoncé, propositions, réponse, explication, autres réponses acceptées]
+   - type : "qcm" (4 propositions), "vf" (vrai ou faux), "texte" (réponse écrite), "rapide" (QCM où la vitesse rapporte plus)
+   - difficulté : 1 facile, 2 intermédiaire, 3 difficile
+   - réponse : index de la bonne proposition (qcm, vf, rapide) ou texte attendu (texte)
+   Pour ajouter une question : copier une ligne, changer l'identifiant (unique) et le contenu. */
+(function (root, factory) {
+  const M = factory();
+  if (typeof module === "object" && module.exports) module.exports = M; else root.QS_BANK = M;
+})(typeof self !== "undefined" ? self : this, function () {
+  "use strict";
+  const VF = ["Vrai", "Faux"];
+  const CATS = [
+    { id: "histoire", name: "Histoire", icon: "🏛️", color: "#e0a63b", desc: "Des pharaons à la conquête spatiale" },
+    { id: "geo", name: "Géographie", icon: "🌍", color: "#2fb5a8", desc: "Capitales, fleuves et records de la planète" },
+    { id: "sciences", name: "Sciences et nature", icon: "🔬", color: "#4cc26b", desc: "Corps humain, chimie, espace" },
+    { id: "cinema", name: "Cinéma et séries", icon: "🎬", color: "#e5484d", desc: "Grand écran et petites séries" },
+    { id: "musique", name: "Musique", icon: "🎵", color: "#c158dc", desc: "Instruments, compositeurs et légendes" },
+    { id: "sport", name: "Sport", icon: "⚽", color: "#3b82f6", desc: "Stades, records et champions" },
+    { id: "gastro", name: "Gastronomie", icon: "🧀", color: "#f08c2b", desc: "Spécialités, produits et savoir-faire" },
+    { id: "culture", name: "Culture générale", icon: "💡", color: "#e8c547", desc: "Un peu de tout, pour les curieux" },
+    { id: "tech", name: "Technologie et inventions", icon: "⚙️", color: "#38bdf8", desc: "Inventeurs, objets et révolutions" },
+    { id: "people", name: "Personnalités", icon: "⭐", color: "#f472b6", desc: "Figures qui ont marqué leur époque" },
+    { id: "animaux", name: "Animaux", icon: "🐾", color: "#84cc16", desc: "Records et curiosités du règne animal" },
+    { id: "art", name: "Art et littérature", icon: "🎨", color: "#a78bfa", desc: "Peintres, écrivains et chefs-d'œuvre" }
+  ];
+  const Q = {
+    histoire: [
+      ["h01", "qcm", 1, "En quelle année a eu lieu la prise de la Bastille ?", ["1789", "1792", "1776", "1804"], 0, "La Bastille est prise le 14 juillet 1789 : c'est le début symbolique de la Révolution française."],
+      ["h02", "qcm", 1, "Quel empereur français a fini sa vie en exil sur l'île de Sainte-Hélène ?", ["Napoléon Ier", "Napoléon III", "Charlemagne", "Louis XVIII"], 0, "Après Waterloo (1815), Napoléon Ier est exilé à Sainte-Hélène, où il meurt en 1821."],
+      ["h03", "vf", 1, "Le mur de Berlin est tombé en 1989.", VF, 0, "Le mur tombe dans la nuit du 9 au 10 novembre 1989."],
+      ["h04", "qcm", 2, "Quelle civilisation a bâti la cité du Machu Picchu, au Pérou ?", ["Les Incas", "Les Aztèques", "Les Mayas", "Les Olmèques"], 0, "Le Machu Picchu est une cité inca construite au XVe siècle."],
+      ["h05", "texte", 2, "Quel navigateur a atteint l'Amérique en 1492 pour le compte des rois d'Espagne ?", null, "Christophe Colomb", "Christophe Colomb accoste aux Bahamas le 12 octobre 1492.", ["Colomb", "Cristoforo Colombo", "Christophe Colomb"]],
+      ["h06", "qcm", 2, "Quelle jeune femme a mené la levée du siège d'Orléans en 1429 ?", ["Jeanne d'Arc", "Catherine de Médicis", "Aliénor d'Aquitaine", "Blanche de Castille"], 0, "Jeanne d'Arc délivre Orléans des Anglais en mai 1429."],
+      ["h07", "rapide", 1, "Qui fut le premier homme à marcher sur la Lune ?", ["Neil Armstrong", "Buzz Aldrin", "Youri Gagarine", "John Glenn"], 0, "Neil Armstrong pose le pied sur la Lune en juillet 1969 lors de la mission Apollo 11."],
+      ["h08", "qcm", 2, "Quel traité signé en 1919 a mis fin à la Première Guerre mondiale avec l'Allemagne ?", ["Le traité de Versailles", "Le traité de Rome", "Le traité de Maastricht", "Le traité de Westphalie"], 0, "Il est signé le 28 juin 1919 dans la galerie des Glaces du château de Versailles."],
+      ["h09", "vf", 2, "Charlemagne a été couronné empereur à Rome en l'an 800.", VF, 0, "Il est couronné par le pape Léon III le 25 décembre 800."],
+      ["h10", "qcm", 3, "Quelle victoire de 1515 est associée au roi François Ier ?", ["Marignan", "Azincourt", "Bouvines", "Pavie"], 0, "Marignan (1515) est une victoire ; à Pavie, en 1525, François Ier est vaincu et fait prisonnier."],
+      ["h11", "qcm", 3, "Quel pharaon est célèbre pour son tombeau découvert presque intact en 1922 ?", ["Toutânkhamon", "Ramsès II", "Khéops", "Akhenaton"], 0, "Howard Carter découvre sa tombe dans la Vallée des Rois en novembre 1922."],
+      ["h12", "rapide", 2, "Sur les côtes de quelle région a eu lieu le débarquement allié du 6 juin 1944 ?", ["La Normandie", "La Bretagne", "La Provence", "La Picardie"], 0, "C'est l'opération Overlord. La Provence a connu un autre débarquement, en août 1944."],
+      ["h13", "texte", 1, "Quel roi de France était surnommé le Roi-Soleil ?", null, "Louis XIV", "Louis XIV règne de 1643 à 1715, le plus long règne de l'histoire de France.", ["Louis 14", "Louis quatorze"]],
+      ["h14", "qcm", 3, "En quelle année les Françaises ont-elles voté pour la première fois ?", ["1945", "1918", "1936", "1958"], 0, "Le droit de vote leur est accordé en 1944 ; elles votent pour la première fois aux municipales d'avril 1945."],
+      ["h15", "qcm", 3, "Quel empire était dirigé par Soliman le Magnifique au XVIe siècle ?", ["L'Empire ottoman", "L'Empire byzantin", "L'Empire perse", "L'Empire moghol"], 0, "Soliman règne de 1520 à 1566, à l'apogée de l'Empire ottoman."],
+      ["h16", "qcm", 2, "Quelle cité romaine a été ensevelie par l'éruption du Vésuve en 79 ?", ["Pompéi", "Carthage", "Troie", "Sparte"], 0, "Pompéi et Herculanum sont ensevelies sous les cendres en 79 apr. J.-C."]
+    ],
+    geo: [
+      ["g01", "qcm", 2, "Quelle est la capitale de l'Australie ?", ["Canberra", "Sydney", "Melbourne", "Perth"], 0, "Canberra a été choisie comme capitale au début du XXe siècle, en compromis entre Sydney et Melbourne."],
+      ["g02", "qcm", 1, "Quel est le plus long fleuve de France ?", ["La Loire", "La Seine", "Le Rhône", "La Garonne"], 0, "La Loire mesure environ 1 000 km."],
+      ["g03", "vf", 1, "Le mont Everest est le plus haut sommet du monde.", VF, 0, "Il culmine à environ 8 849 m, à la frontière entre le Népal et la Chine."],
+      ["g04", "qcm", 2, "Combien de pays ont une frontière terrestre avec la France métropolitaine ?", ["8", "6", "7", "9"], 0, "Belgique, Luxembourg, Allemagne, Suisse, Italie, Monaco, Andorre et Espagne."],
+      ["g05", "texte", 2, "Quelle est la capitale du Canada ?", null, "Ottawa", "Ottawa est la capitale ; Toronto est la plus grande ville du pays.", []],
+      ["g06", "qcm", 2, "Quel est le plus grand désert chaud du monde ?", ["Le Sahara", "Le Gobi", "Le Kalahari", "L'Atacama"], 0, "Le Sahara couvre environ 9 millions de km²."],
+      ["g07", "rapide", 1, "Sur quel continent se trouve la majeure partie de l'Égypte ?", ["L'Afrique", "L'Asie", "L'Europe", "L'Océanie"], 0, "L'Égypte est en Afrique ; seule la péninsule du Sinaï est en Asie."],
+      ["g08", "qcm", 1, "Quel est le plus grand océan du monde ?", ["Le Pacifique", "L'Atlantique", "L'océan Indien", "L'océan Arctique"], 0, "Le Pacifique couvre près d'un tiers de la surface du globe."],
+      ["g09", "vf", 2, "La Suisse est membre de l'Union européenne.", VF, 1, "La Suisse n'est pas membre de l'Union européenne, mais elle fait partie de l'espace Schengen."],
+      ["g10", "qcm", 3, "Quelle est la capitale de la Nouvelle-Zélande ?", ["Wellington", "Auckland", "Christchurch", "Queenstown"], 0, "Wellington est la capitale ; Auckland est la plus grande ville."],
+      ["g11", "qcm", 3, "Quel pays compte le plus de fuseaux horaires, territoires d'outre-mer compris ?", ["La France", "La Russie", "Les États-Unis", "La Chine"], 0, "Grâce à ses outre-mer, la France s'étend sur 12 fuseaux horaires."],
+      ["g12", "rapide", 2, "Quel fleuve traverse Londres ?", ["La Tamise", "La Seine", "Le Rhin", "Le Danube"], 0, "La Tamise (Thames, en anglais) traverse la capitale britannique."],
+      ["g13", "texte", 2, "Quel est le plus petit État du monde ?", null, "Vatican", "Le Vatican mesure environ 0,44 km², enclavé dans Rome.", ["le Vatican", "Cité du Vatican", "Etat du Vatican"]],
+      ["g14", "qcm", 3, "Dans quel pays se trouve la ville de Tombouctou ?", ["Le Mali", "Le Niger", "Le Sénégal", "La Mauritanie"], 0, "Tombouctou se trouve au Mali, près du fleuve Niger."],
+      ["g15", "qcm", 2, "Quel détroit sépare l'Europe de l'Afrique ?", ["Gibraltar", "Le Bosphore", "Ormuz", "Béring"], 0, "Le détroit de Gibraltar mesure environ 14 km à son point le plus étroit."],
+      ["g16", "qcm", 3, "Quel est le plus long fleuve d'Europe ?", ["La Volga", "Le Danube", "Le Rhin", "Le Dniepr"], 0, "La Volga, en Russie, mesure environ 3 500 km."]
+    ],
+    sciences: [
+      ["s01", "qcm", 1, "Quelle planète est la plus proche du Soleil ?", ["Mercure", "Vénus", "Mars", "La Terre"], 0, "Mercure tourne à environ 58 millions de km du Soleil."],
+      ["s02", "qcm", 1, "Quelle est la formule chimique de l'eau ?", ["H₂O", "CO₂", "O₂", "NaCl"], 0, "Une molécule d'eau compte deux atomes d'hydrogène et un atome d'oxygène."],
+      ["s03", "vf", 1, "Le son se propage plus vite que la lumière.", VF, 1, "C'est l'inverse : la lumière va près d’un million de fois plus vite que le son dans l'air."],
+      ["s04", "qcm", 2, "Combien d'os compte le squelette d'un adulte ?", ["206", "180", "250", "312"], 0, "Un adulte en a 206 ; un nouveau-né en a davantage, qui se soudent en grandissant."],
+      ["s05", "texte", 2, "Quel gaz les plantes absorbent-elles pour réaliser la photosynthèse ?", null, "Dioxyde de carbone", "Les plantes absorbent le CO₂ et rejettent du dioxygène.", ["CO2", "gaz carbonique", "dioxyde de carbone", "CO₂"]],
+      ["s06", "qcm", 1, "Quelle est la plus grande planète du Système solaire ?", ["Jupiter", "Saturne", "Neptune", "Uranus"], 0, "Jupiter est environ 11 fois plus large que la Terre."],
+      ["s07", "rapide", 1, "À quelle température l'eau bout-elle au niveau de la mer ?", ["100 °C", "90 °C", "80 °C", "120 °C"], 0, "À la pression atmosphérique normale, l'eau bout à 100 °C."],
+      ["s08", "qcm", 2, "Quel organe produit l'insuline ?", ["Le pancréas", "Le foie", "Les reins", "La rate"], 0, "L'insuline est produite par les îlots de Langerhans, dans le pancréas."],
+      ["s09", "vf", 2, "Le diamant est composé de carbone.", VF, 0, "Le diamant est du carbone cristallisé, tout comme le graphite des crayons."],
+      ["s10", "qcm", 2, "Quel savant a formulé la théorie de la relativité ?", ["Albert Einstein", "Isaac Newton", "Niels Bohr", "Max Planck"], 0, "Relativité restreinte en 1905, relativité générale en 1915."],
+      ["s11", "qcm", 3, "Quel est l'élément chimique le plus abondant dans l'Univers ?", ["L'hydrogène", "L'oxygène", "L'hélium", "Le carbone"], 0, "L'hydrogène représente environ les trois quarts de la masse de la matière ordinaire."],
+      ["s12", "rapide", 3, "Combien de chromosomes compte une cellule humaine ordinaire ?", ["46", "23", "48", "64"], 0, "23 paires, soit 46 chromosomes."],
+      ["s13", "texte", 2, "Quel est le symbole chimique de l'or ?", null, "Au", "Au vient du latin aurum.", []],
+      ["s14", "qcm", 3, "Quelle est la vitesse approximative de la lumière dans le vide ?", ["300 000 km/s", "30 000 km/s", "3 000 km/s", "3 millions de km/s"], 0, "Précisément 299 792,458 km/s."],
+      ["s15", "qcm", 3, "Dans quelle couche de l'atmosphère se trouve la couche d'ozone ?", ["La stratosphère", "La troposphère", "La mésosphère", "La thermosphère"], 0, "La couche d'ozone se situe entre environ 15 et 35 km d'altitude, dans la stratosphère."],
+      ["s16", "qcm", 1, "Quelle planète est surnommée la planète rouge ?", ["Mars", "Vénus", "Jupiter", "Mercure"], 0, "Sa couleur vient de l'oxyde de fer présent à sa surface."]
+    ],
+    cinema: [
+      ["c01", "qcm", 1, "Quel réalisateur a signé le film « Jurassic Park » (1993) ?", ["Steven Spielberg", "James Cameron", "George Lucas", "Ridley Scott"], 0, "Il est adapté du roman de Michael Crichton."],
+      ["c02", "qcm", 1, "Quelle récompense est remise au meilleur film du Festival de Cannes ?", ["La Palme d'or", "L'Ours d'or", "Le Lion d'or", "Le César"], 0, "L'Ours d'or est décerné à Berlin, le Lion d'or à Venise."],
+      ["c03", "vf", 1, "Le film « Titanic » de James Cameron est sorti en 1997.", VF, 0, "Sorti fin 1997, il remporte 11 Oscars."],
+      ["c04", "qcm", 1, "Quel acteur incarne Jack Sparrow dans « Pirates des Caraïbes » ?", ["Johnny Depp", "Orlando Bloom", "Brad Pitt", "Leonardo DiCaprio"], 0, "Johnny Depp joue le capitaine Jack Sparrow à partir de 2003."],
+      ["c05", "texte", 1, "Comment s'appelle le jeune sorcier à lunettes créé par J. K. Rowling ?", null, "Harry Potter", "Héros de sept romans adaptés en huit films.", ["Potter", "Harry"]],
+      ["c06", "qcm", 2, "Dans « Le Seigneur des anneaux », quel hobbit porte l'Anneau unique jusqu'au Mordor ?", ["Frodon", "Sam", "Bilbon", "Pippin"], 0, "Frodon Sacquet hérite de l'anneau de son oncle Bilbon."],
+      ["c07", "rapide", 1, "Quel studio a créé Mickey Mouse ?", ["Disney", "Pixar", "DreamWorks", "Warner Bros."], 0, "Mickey apparaît en 1928 dans « Steamboat Willie »."],
+      ["c08", "qcm", 2, "Quel film de Jean-Pierre Jeunet, sorti en 2001, se déroule à Montmartre ?", ["Le Fabuleux Destin d'Amélie Poulain", "Intouchables", "La Haine", "Les Choristes"], 0, "Audrey Tautou y incarne Amélie."],
+      ["c09", "vf", 2, "Omar Sy et François Cluzet sont les deux acteurs principaux d'« Intouchables ».", VF, 0, "Le film est réalisé par Olivier Nakache et Éric Toledano (2011)."],
+      ["c10", "qcm", 3, "Quel est le premier long métrage entièrement réalisé en images de synthèse ?", ["Toy Story", "Shrek", "Le Roi lion", "Fourmiz"], 0, "Toy Story, produit par Pixar, sort en 1995."],
+      ["c11", "qcm", 2, "Dans quelle ville vivent les personnages de la série « Friends » ?", ["New York", "Los Angeles", "Chicago", "Boston"], 0, "La série se déroule à Manhattan, de 1994 à 2004."],
+      ["c12", "rapide", 2, "Qui a créé la saga « Star Wars » ?", ["George Lucas", "Steven Spielberg", "J. J. Abrams", "James Cameron"], 0, "Le premier film sort en 1977."],
+      ["c13", "texte", 2, "Quel acteur français a joué Obélix au cinéma de 1999 à 2012 ?", null, "Gérard Depardieu", "Il l'incarne dans quatre films « Astérix ».", ["Depardieu"]],
+      ["c14", "qcm", 3, "Quel film de 1939 raconte l'histoire de Scarlett O'Hara ?", ["Autant en emporte le vent", "Casablanca", "Le Magicien d'Oz", "Citizen Kane"], 0, "Il est adapté du roman de Margaret Mitchell."],
+      ["c15", "qcm", 3, "Quel réalisateur a tourné « Psychose » (1960) ?", ["Alfred Hitchcock", "Stanley Kubrick", "Orson Welles", "Billy Wilder"], 0, "La scène de la douche est l'une des plus célèbres du cinéma."],
+      ["c16", "qcm", 3, "Combien d'Oscars le film « Titanic » a-t-il remportés ?", ["11", "9", "7", "13"], 0, "Un record partagé avec « Ben-Hur » et « Le Retour du roi »."]
+    ],
+    musique: [
+      ["m01", "qcm", 1, "Combien de cordes possède une guitare classique standard ?", ["6", "4", "5", "7"], 0, "Six cordes, accordées mi, la, ré, sol, si, mi."],
+      ["m02", "qcm", 1, "Quel compositeur, devenu sourd, a écrit la Neuvième Symphonie et son « Ode à la joie » ?", ["Beethoven", "Mozart", "Bach", "Chopin"], 0, "Elle est créée à Vienne en 1824."],
+      ["m03", "vf", 1, "Mozart est né à Salzbourg.", VF, 0, "Wolfgang Amadeus Mozart naît à Salzbourg le 27 janvier 1756."],
+      ["m04", "qcm", 2, "De quel pays vient le groupe ABBA ?", ["La Suède", "La Norvège", "Le Danemark", "Les Pays-Bas"], 0, "ABBA remporte l'Eurovision en 1974 avec « Waterloo »."],
+      ["m05", "texte", 1, "Quel instrument à touches noires et blanches en compte généralement 88 ?", null, "Piano", "Le piano moderne compte 52 touches blanches et 36 noires.", ["le piano"]],
+      ["m06", "qcm", 2, "Quel chanteur américain était surnommé « le King » ?", ["Elvis Presley", "Michael Jackson", "Frank Sinatra", "Johnny Cash"], 0, "Elvis Presley, le roi du rock'n'roll."],
+      ["m07", "rapide", 1, "Combien de musiciens compte un quatuor ?", ["4", "3", "5", "6"], 0, "Quatuor = quatre musiciens ; trio = trois ; quintette = cinq."],
+      ["m08", "qcm", 2, "Quelle chanteuse française a créé « La Vie en rose » ?", ["Édith Piaf", "Barbara", "Dalida", "Juliette Gréco"], 0, "Édith Piaf l'écrit en 1945 et l'enregistre peu après."],
+      ["m09", "vf", 2, "Les Beatles venaient de Liverpool.", VF, 0, "Le groupe s'est formé à Liverpool, en Angleterre."],
+      ["m10", "qcm", 3, "Quel compositeur a écrit « Les Quatre Saisons » ?", ["Vivaldi", "Haendel", "Haydn", "Schubert"], 0, "Antonio Vivaldi, vers 1725."],
+      ["m11", "qcm", 2, "Combien de lignes compte une portée musicale ?", ["5", "4", "6", "7"], 0, "Les notes s'écrivent sur cinq lignes et dans les quatre interlignes."],
+      ["m12", "rapide", 2, "Quel artiste est surnommé le « roi de la pop » ?", ["Michael Jackson", "Prince", "Elvis Presley", "Freddie Mercury"], 0, "Michael Jackson, notamment pour l'album « Thriller » (1982)."],
+      ["m13", "texte", 3, "Quel compositeur polonais a écrit de nombreuses polonaises et mazurkas pour piano ?", null, "Chopin", "Frédéric Chopin (1810-1849) a passé une grande partie de sa vie à Paris.", ["Frédéric Chopin", "Frederic Chopin"]],
+      ["m14", "qcm", 3, "De quel instrument jouait le jazzman Miles Davis ?", ["La trompette", "Le saxophone", "Le piano", "La contrebasse"], 0, "Miles Davis est l'un des plus grands trompettistes de jazz."],
+      ["m15", "qcm", 3, "Quel opéra de Bizet a pour héroïne une cigarière de Séville ?", ["Carmen", "La Traviata", "Tosca", "Aïda"], 0, "Carmen est créé à Paris en 1875."],
+      ["m16", "qcm", 3, "Dans un orchestre, à quelle famille d'instruments appartient le hautbois ?", ["Les bois", "Les cuivres", "Les cordes", "Les percussions"], 0, "Le hautbois est un instrument à vent de la famille des bois, comme la clarinette et le basson."]
+    ],
+    sport: [
+      ["sp01", "qcm", 1, "Combien de joueurs une équipe de football aligne-t-elle sur le terrain ?", ["11", "10", "12", "9"], 0, "Dix joueurs de champ et un gardien."],
+      ["sp02", "qcm", 1, "Dans quel sport utilise-t-on un volant ?", ["Le badminton", "Le tennis", "Le squash", "Le tennis de table"], 0, "Le volant est traditionnellement fait de plumes d'oie."],
+      ["sp03", "vf", 1, "Les Jeux olympiques d'été ont normalement lieu tous les quatre ans.", VF, 0, "Seule exception récente : ceux de Tokyo 2020, décalés en 2021."],
+      ["sp04", "qcm", 1, "Quel pays a remporté la Coupe du monde de football en 1998 ?", ["La France", "Le Brésil", "L'Allemagne", "L'Italie"], 0, "La France bat le Brésil 3-0 au Stade de France."],
+      ["sp05", "texte", 1, "De quelle couleur est le maillot du leader du Tour de France ?", null, "Jaune", "Le maillot jaune existe depuis 1919.", ["maillot jaune", "le maillot jaune"]],
+      ["sp06", "qcm", 2, "Sur quelle surface se joue le tournoi de Roland-Garros ?", ["La terre battue", "Le gazon", "Le dur", "La moquette"], 0, "Wimbledon se joue sur gazon, l'US Open et l'Open d'Australie sur dur."],
+      ["sp07", "rapide", 1, "Combien de points vaut un panier marqué derrière la ligne à 3 points au basket ?", ["3", "2", "1", "4"], 0, "Derrière l'arc, le panier vaut 3 points."],
+      ["sp08", "qcm", 2, "Quelle distance parcourt un marathon ?", ["42,195 km", "40 km", "45 km", "38,5 km"], 0, "Cette distance est fixée depuis les Jeux de Londres de 1908."],
+      ["sp09", "vf", 2, "Au rugby à XV, un essai vaut 5 points.", VF, 0, "La transformation qui suit rapporte 2 points de plus."],
+      ["sp10", "qcm", 3, "Dans quelle ville ont eu lieu les premiers Jeux olympiques modernes, en 1896 ?", ["Athènes", "Paris", "Londres", "Olympie"], 0, "Pierre de Coubertin est à l'origine de leur renaissance."],
+      ["sp11", "qcm", 2, "Combien de trous compte un parcours de golf standard ?", ["18", "9", "12", "21"], 0, "Un parcours complet compte 18 trous."],
+      ["sp12", "rapide", 2, "Quel sprinteur a couru le 100 m en 9 s 58 à Berlin en 2009 ?", ["Usain Bolt", "Carl Lewis", "Asafa Powell", "Yohan Blake"], 0, "Le Jamaïcain Usain Bolt établit ce record lors des championnats du monde de 2009."],
+      ["sp13", "texte", 3, "Quel est le nom du trophée remis au vainqueur de la Coupe du monde de rugby ?", null, "Coupe Webb Ellis", "Il porte le nom de William Webb Ellis, inventeur légendaire du rugby.", ["Webb Ellis", "Coupe Webb-Ellis", "Webb-Ellis", "trophée Webb Ellis"]],
+      ["sp14", "qcm", 2, "Combien de joueurs une équipe de volley-ball aligne-t-elle sur le terrain ?", ["6", "5", "7", "4"], 0, "Six joueurs, qui tournent à chaque reprise de service."],
+      ["sp15", "qcm", 1, "Dans quel sport le Français Teddy Riner s'est-il illustré ?", ["Le judo", "La lutte", "La boxe", "Le karaté"], 0, "Teddy Riner est l'un des plus grands judokas de l'histoire."],
+      ["sp16", "qcm", 3, "Quelles sont les trois armes de l'escrime ?", ["Fleuret, épée, sabre", "Fleuret, dague, sabre", "Épée, lance, sabre", "Fleuret, épée, rapière"], 0, "Chaque arme a ses propres règles et sa surface valable."],
+      ["sp17", "qcm", 3, "Combien de minutes dure un match de handball, hors prolongations ?", ["60", "80", "70", "90"], 0, "Deux mi-temps de 30 minutes."]
+    ],
+    gastro: [
+      ["ga01", "qcm", 1, "De quelle région la choucroute est-elle la spécialité ?", ["L'Alsace", "La Bretagne", "La Provence", "La Normandie"], 0, "Chou fermenté accompagné de charcuteries."],
+      ["ga02", "qcm", 1, "Quel est l'ingrédient principal du guacamole ?", ["L'avocat", "La tomate", "Le poivron", "Le concombre"], 0, "Le guacamole est une recette mexicaine à base d'avocat écrasé."],
+      ["ga03", "vf", 1, "Le roquefort est un fromage au lait de brebis.", VF, 0, "Il est affiné dans les caves de Roquefort-sur-Soulzon, en Aveyron."],
+      ["ga04", "qcm", 1, "De quel pays la paella est-elle originaire ?", ["L'Espagne", "L'Italie", "Le Portugal", "Le Mexique"], 0, "Elle est née dans la région de Valence."],
+      ["ga05", "texte", 2, "Quelle épice, la plus chère du monde, provient des stigmates d'une fleur de crocus ?", null, "Safran", "Il faut environ 150 fleurs pour obtenir un gramme de safran.", ["le safran"]],
+      ["ga06", "qcm", 1, "Quel légume est la base du gaspacho ?", ["La tomate", "La courgette", "La carotte", "Le poireau"], 0, "Le gaspacho est une soupe froide andalouse."],
+      ["ga07", "rapide", 1, "Dans quel pays la pizza Margherita a-t-elle été créée ?", ["L'Italie", "La France", "La Grèce", "L'Espagne"], 0, "Selon la tradition, à Naples en 1889."],
+      ["ga08", "qcm", 2, "Quelle ville française est célèbre pour sa moutarde ?", ["Dijon", "Lyon", "Bordeaux", "Nantes"], 0, "La moutarde de Dijon désigne aujourd'hui une recette, pas une origine."],
+      ["ga09", "vf", 2, "Le cassoulet est une spécialité de la région lyonnaise.", VF, 1, "Le cassoulet vient du Sud-Ouest : Castelnaudary, Carcassonne et Toulouse s'en disputent la paternité."],
+      ["ga10", "qcm", 2, "Quel fruit sec est la base de la pâte d'amande, ou massepain ?", ["L'amande", "La noisette", "La noix", "La pistache"], 0, "Le massepain mélange amandes en poudre et sucre."],
+      ["ga11", "qcm", 2, "Comment s'appelle la pâte de soja fermentée de la cuisine japonaise ?", ["Le miso", "Le wasabi", "Le tofu", "Le nori"], 0, "Le miso sert notamment à préparer la soupe miso."],
+      ["ga12", "rapide", 2, "Quelle boisson obtient-on en faisant fermenter du jus de pomme ?", ["Le cidre", "Le poiré", "L'hydromel", "Le kéfir"], 0, "Le poiré est fait avec des poires, l'hydromel avec du miel."],
+      ["ga13", "texte", 2, "Comment appelle-t-on le dessert de crème anglaise surmontée de blancs en neige pochés ?", null, "Île flottante", "Une variante proche, les œufs à la neige, utilise plusieurs petites boules de blancs.", ["iles flottantes", "œufs à la neige", "oeufs à la neige", "oeufs a la neige"]],
+      ["ga14", "qcm", 2, "Quel fromage italien entre traditionnellement dans le tiramisu ?", ["Le mascarpone", "La ricotta", "La mozzarella", "Le gorgonzola"], 0, "Le mascarpone est un fromage frais et crémeux de Lombardie."],
+      ["ga15", "qcm", 3, "De quelle région vient le piment d'Espelette ?", ["Le Pays basque", "La Provence", "La Corse", "L'Alsace"], 0, "Il bénéficie d'une appellation d'origine protégée."],
+      ["ga16", "qcm", 3, "Quel cépage donne les vins rouges du Beaujolais ?", ["Le gamay", "Le merlot", "La syrah", "Le chardonnay"], 0, "Le gamay noir à jus blanc."],
+      ["ga17", "qcm", 3, "Quel pays est le premier producteur de café au monde ?", ["Le Brésil", "La Colombie", "Le Vietnam", "L'Éthiopie"], 0, "Le Brésil occupe cette place depuis plus d'un siècle."],
+      ["ga18", "qcm", 3, "Quel champignon très recherché est surnommé le « diamant noir » ?", ["La truffe noire", "Le cèpe", "La morille", "La girolle"], 0, "La truffe noire du Périgord (Tuber melanosporum)."]
+    ],
+    culture: [
+      ["cg01", "qcm", 1, "Combien de jours compte une année bissextile ?", ["366", "365", "364", "367"], 0, "Le 29 février s'ajoute en principe tous les quatre ans."],
+      ["cg02", "qcm", 1, "Combien de côtés a un hexagone ?", ["6", "5", "7", "8"], 0, "Hexa signifie six en grec."],
+      ["cg03", "vf", 1, "Le drapeau du Japon représente un disque rouge sur fond blanc.", VF, 0, "Il symbolise le soleil levant."],
+      ["cg04", "qcm", 2, "Quelle langue compte le plus de locuteurs natifs au monde ?", ["Le mandarin", "L'anglais", "L'espagnol", "L'hindi"], 0, "Le mandarin compte plus de 900 millions de locuteurs natifs."],
+      ["cg05", "texte", 2, "Combien y a-t-il de minutes dans une journée ?", null, "1440", "24 heures × 60 minutes = 1 440 minutes.", ["1 440", "mille quatre cent quarante"]],
+      ["cg06", "qcm", 2, "Quel chiffre romain correspond à 50 ?", ["L", "C", "D", "X"], 0, "I = 1, V = 5, X = 10, L = 50, C = 100, D = 500, M = 1 000."],
+      ["cg07", "rapide", 1, "Combien de couleurs compte traditionnellement un arc-en-ciel ?", ["7", "5", "6", "8"], 0, "Rouge, orange, jaune, vert, bleu, indigo et violet."],
+      ["cg08", "qcm", 1, "Quelle est la devise de la République française ?", ["Liberté, Égalité, Fraternité", "Unité, Travail, Progrès", "Paix, Justice, Liberté", "Honneur et Patrie"], 0, "Elle est inscrite dans la Constitution."],
+      ["cg09", "vf", 2, "Le Mont-Saint-Michel se trouve en Normandie.", VF, 0, "Il est situé dans la Manche, tout près de la Bretagne."],
+      ["cg10", "qcm", 2, "Combien de cases compte un échiquier ?", ["64", "81", "100", "49"], 0, "8 × 8 = 64 cases."],
+      ["cg11", "qcm", 2, "Que mesure l'échelle de Richter ?", ["La magnitude des séismes", "La force du vent", "La dureté des minéraux", "L'acidité"], 0, "La force du vent se mesure sur l'échelle de Beaufort."],
+      ["cg12", "rapide", 1, "Quel est le plus grand total possible avec deux dés classiques ?", ["12", "10", "11", "36"], 0, "6 + 6 = 12."],
+      ["cg13", "texte", 2, "Comment appelle-t-on un polygone à huit côtés ?", null, "Octogone", "Comme le panneau « Stop ».", ["un octogone"]],
+      ["cg14", "qcm", 3, "Quelle échelle classe la dureté des minéraux de 1 à 10 ?", ["L'échelle de Mohs", "L'échelle de Beaufort", "L'échelle Kelvin", "L'échelle de Mercalli"], 0, "Le talc vaut 1, le diamant 10."],
+      ["cg15", "qcm", 2, "Combien de pièces chaque joueur a-t-il au début d'une partie d'échecs ?", ["16", "12", "18", "20"], 0, "8 pions, 2 tours, 2 cavaliers, 2 fous, une dame et un roi."],
+      ["cg16", "qcm", 3, "Quel symbole désigne le yen, la monnaie japonaise ?", ["¥", "₩", "£", "₹"], 0, "₩ est le won coréen, £ la livre sterling, ₹ la roupie indienne."],
+      ["cg17", "qcm", 2, "Quel pays a offert la statue de la Liberté aux États-Unis ?", ["La France", "Le Royaume-Uni", "L'Espagne", "Les Pays-Bas"], 0, "Inaugurée en 1886, elle est l'œuvre du sculpteur Bartholdi."],
+      ["cg18", "qcm", 3, "Combien de faces possède un icosaèdre ?", ["20", "12", "8", "24"], 0, "Icosa signifie vingt en grec ; c'est la forme des dés à 20 faces."],
+      ["cg19", "qcm", 3, "Comment appelle-t-on un mot ou une phrase qui se lit de la même façon dans les deux sens ?", ["Un palindrome", "Une anagramme", "Un acrostiche", "Un oxymore"], 0, "Par exemple « kayak » ou « radar »."]
+    ],
+    tech: [
+      ["t01", "qcm", 1, "Quel inventeur américain a mis au point une ampoule électrique durable en 1879 ?", ["Thomas Edison", "Nikola Tesla", "Alexander Graham Bell", "Benjamin Franklin"], 0, "D'autres inventeurs travaillaient sur l'ampoule, mais Edison l'a rendue durable et commercialisable."],
+      ["t02", "qcm", 1, "Quel inventeur a déposé en 1876 le brevet du téléphone ?", ["Alexander Graham Bell", "Thomas Edison", "Guglielmo Marconi", "Samuel Morse"], 0, "Bell obtient le brevet en mars 1876."],
+      ["t03", "vf", 1, "Les frères Lumière ont inventé le cinématographe.", VF, 0, "Première projection publique payante le 28 décembre 1895 à Paris."],
+      ["t04", "qcm", 1, "Quel Français a inventé un système d'écriture en relief pour les aveugles ?", ["Louis Braille", "Valentin Haüy", "Blaise Pascal", "Louis Pasteur"], 0, "Louis Braille, lui-même aveugle, met au point son alphabet vers 1825."],
+      ["t05", "texte", 1, "Quel savant français a mis au point le vaccin contre la rage en 1885 ?", null, "Louis Pasteur", "Il vaccine le jeune Joseph Meister en juillet 1885.", ["Pasteur"]],
+      ["t06", "qcm", 2, "Quel inventeur allemand a développé l'imprimerie à caractères mobiles vers 1450 ?", ["Gutenberg", "Daimler", "Diesel", "Siemens"], 0, "Johannes Gutenberg imprime notamment une célèbre Bible."],
+      ["t07", "rapide", 1, "Quel instrument mesure la pression atmosphérique ?", ["Le baromètre", "Le thermomètre", "L'anémomètre", "L'hygromètre"], 0, "L'anémomètre mesure le vent, l'hygromètre l'humidité."],
+      ["t08", "qcm", 2, "Le nom de quel ingénieur porte la tour de fer inaugurée à Paris en 1889 ?", ["Gustave Eiffel", "Le Corbusier", "Haussmann", "Viollet-le-Duc"], 0, "Elle a été construite par son entreprise pour l'Exposition universelle de 1889."],
+      ["t09", "vf", 2, "Le premier vol motorisé des frères Wright a eu lieu en 1903.", VF, 0, "Le 17 décembre 1903, à Kitty Hawk, aux États-Unis."],
+      ["t10", "qcm", 2, "Quel savant français a inventé la Pascaline, l'une des premières machines à calculer ?", ["Blaise Pascal", "René Descartes", "Pierre de Fermat", "Joseph Fourier"], 0, "Il la conçoit vers 1642, à 19 ans."],
+      ["t11", "qcm", 3, "Quel physicien italien a inventé la pile électrique en 1800 ?", ["Alessandro Volta", "Galilée", "Enrico Fermi", "Luigi Galvani"], 0, "Le volt, unité de tension, porte son nom."],
+      ["t12", "rapide", 2, "Combien de bits contient un octet ?", ["8", "4", "16", "10"], 0, "Un octet = 8 bits."],
+      ["t13", "texte", 3, "Quel est le nom du premier satellite artificiel, lancé par l'URSS en 1957 ?", null, "Spoutnik", "Spoutnik 1 est lancé le 4 octobre 1957.", ["Spoutnik 1", "Sputnik", "Sputnik 1"]],
+      ["t14", "qcm", 2, "Quel savant écossais a découvert la pénicilline en 1928 ?", ["Alexander Fleming", "Louis Pasteur", "Robert Koch", "Joseph Lister"], 0, "C'est le premier antibiotique."],
+      ["t15", "qcm", 3, "Quel ingénieur allemand a donné son nom au moteur à allumage par compression ?", ["Rudolf Diesel", "Gottlieb Daimler", "Karl Benz", "Nikolaus Otto"], 0, "Rudolf Diesel le fait breveter dans les années 1890."],
+      ["t16", "qcm", 3, "Quel aviateur français a réussi la première traversée de la Manche en avion, en 1909 ?", ["Louis Blériot", "Roland Garros", "Clément Ader", "Henri Farman"], 0, "Le 25 juillet 1909, de Calais à Douvres."]
+    ],
+    people: [
+      ["p01", "qcm", 1, "Quelle scientifique a reçu deux prix Nobel, en physique puis en chimie ?", ["Marie Curie", "Rosalind Franklin", "Irène Joliot-Curie", "Ada Lovelace"], 0, "Prix Nobel de physique en 1903 et de chimie en 1911."],
+      ["p02", "qcm", 1, "Quel militant sud-africain est devenu président en 1994 après 27 ans de prison ?", ["Nelson Mandela", "Desmond Tutu", "Steve Biko", "Thabo Mbeki"], 0, "Il reçoit le prix Nobel de la paix en 1993."],
+      ["p03", "vf", 1, "Charlie Chaplin est célèbre pour son personnage de Charlot.", VF, 0, "Le vagabond Charlot apparaît en 1914."],
+      ["p04", "qcm", 1, "Qui a été le premier président de la Ve République ?", ["Charles de Gaulle", "Georges Pompidou", "François Mitterrand", "Vincent Auriol"], 0, "De 1959 à 1969."],
+      ["p05", "texte", 1, "Quel pasteur américain a prononcé le discours « I have a dream » en 1963 ?", null, "Martin Luther King", "Il le prononce à Washington le 28 août 1963.", ["Luther King", "Martin Luther King Jr", "MLK"]],
+      ["p06", "qcm", 2, "Quelle aviatrice américaine fut la première femme à traverser l'Atlantique seule en avion, en 1932 ?", ["Amelia Earhart", "Hélène Boucher", "Bessie Coleman", "Amy Johnson"], 0, "Elle disparaît en 1937 au-dessus du Pacifique."],
+      ["p07", "rapide", 1, "Quel physicien est associé à la formule E = mc² ?", ["Albert Einstein", "Isaac Newton", "Stephen Hawking", "Galilée"], 0, "Elle exprime l'équivalence entre masse et énergie (1905)."],
+      ["p08", "qcm", 2, "Quel cosmonaute soviétique a été le premier homme dans l'espace, en 1961 ?", ["Youri Gagarine", "Alexeï Leonov", "Guerman Titov", "Valentina Terechkova"], 0, "Le 12 avril 1961, à bord de Vostok 1."],
+      ["p09", "vf", 2, "Coco Chanel était une créatrice de mode française.", VF, 0, "Gabrielle Chanel (1883-1971) a fondé la maison Chanel."],
+      ["p10", "qcm", 3, "Quelle femme a été la première lauréate du prix Nobel de la paix, en 1905 ?", ["Bertha von Suttner", "Mère Teresa", "Jane Addams", "Marie Curie"], 0, "Cette Autrichienne militait pour le désarmement."],
+      ["p11", "qcm", 3, "Quel navigateur portugais a lancé la première expédition autour du monde, achevée en 1522 ?", ["Fernand de Magellan", "Vasco de Gama", "Bartolomeu Dias", "Pedro Álvares Cabral"], 0, "Magellan meurt en 1521 aux Philippines ; Elcano ramène l'expédition en Espagne."],
+      ["p12", "rapide", 2, "Quel peintre espagnol a fondé le cubisme avec Georges Braque ?", ["Pablo Picasso", "Salvador Dalí", "Joan Miró", "Francisco de Goya"], 0, "Le cubisme naît vers 1907-1908."],
+      ["p13", "texte", 3, "Quelle cosmonaute soviétique fut la première femme dans l'espace, en 1963 ?", null, "Valentina Terechkova", "Elle vole à bord de Vostok 6 en juin 1963.", ["Terechkova", "Tereshkova", "Valentina Tereshkova"]],
+      ["p14", "qcm", 3, "Quel explorateur norvégien a atteint le premier le pôle Sud, en 1911 ?", ["Roald Amundsen", "Robert Scott", "Ernest Shackleton", "Fridtjof Nansen"], 0, "Il y arrive le 14 décembre 1911, un mois avant Scott."],
+      ["p15", "qcm", 3, "Quel écrivain fut le premier président de la République tchèque, en 1993 ?", ["Václav Havel", "Lech Wałęsa", "Alexander Dubček", "Milan Kundera"], 0, "Dramaturge et dissident, il avait été président de la Tchécoslovaquie dès 1989."],
+      ["p16", "qcm", 2, "Sous quel nom de naissance le boxeur Mohamed Ali était-il connu ?", ["Cassius Clay", "Joe Frazier", "George Foreman", "Sonny Liston"], 0, "Il change de nom en 1964."]
+    ],
+    animaux: [
+      ["a01", "qcm", 1, "Quel est le plus grand animal du monde ?", ["La baleine bleue", "L'éléphant d'Afrique", "Le requin-baleine", "La girafe"], 0, "Elle peut dépasser 25 m de long."],
+      ["a02", "qcm", 1, "Combien de pattes a une araignée ?", ["8", "6", "10", "12"], 0, "Les araignées ont huit pattes ; les insectes en ont six."],
+      ["a03", "vf", 1, "La chauve-souris est un mammifère.", VF, 0, "C'est même le seul mammifère capable de voler vraiment."],
+      ["a04", "qcm", 1, "Quel est l'animal terrestre le plus rapide ?", ["Le guépard", "Le lion", "L'antilope", "Le lévrier"], 0, "Il peut dépasser 100 km/h en pointe."],
+      ["a05", "texte", 1, "Comment appelle-t-on le petit de la vache ?", null, "Veau", "Le veau devient génisse (femelle) ou taurillon (mâle).", ["le veau", "un veau"]],
+      ["a06", "qcm", 2, "Quel oiseau incapable de voler vit en Antarctique ?", ["Le manchot empereur", "Le pingouin torda", "L'albatros", "Le pétrel"], 0, "Le pingouin torda, lui, sait voler et vit dans l'hémisphère Nord."],
+      ["a07", "rapide", 1, "De quoi se nourrit principalement le panda géant ?", ["De bambou", "De fruits", "De poisson", "D'insectes"], 0, "Il en mange plus de 10 kg par jour."],
+      ["a08", "qcm", 3, "Combien de cœurs possède une pieuvre ?", ["3", "1", "2", "4"], 0, "Deux cœurs pour les branchies et un pour le reste du corps."],
+      ["a09", "vf", 2, "Le dauphin est un poisson.", VF, 1, "Le dauphin est un mammifère marin : il respire de l'air."],
+      ["a10", "qcm", 2, "Quel reptile change de couleur et bouge ses yeux indépendamment l'un de l'autre ?", ["Le caméléon", "L'iguane", "Le gecko", "La salamandre"], 0, "La salamandre, elle, est un amphibien."],
+      ["a11", "qcm", 2, "Quel marsupial australien se nourrit presque uniquement d'eucalyptus ?", ["Le koala", "Le wombat", "Le kangourou", "L'opossum"], 0, "Le koala dort jusqu'à 20 heures par jour."],
+      ["a12", "rapide", 3, "Lequel de ces mammifères pond des œufs ?", ["L'ornithorynque", "Le castor", "La loutre", "Le hérisson"], 0, "L'ornithorynque et l'échidné sont des mammifères ovipares."],
+      ["a13", "texte", 3, "Comment appelle-t-on la femelle du sanglier ?", null, "Laie", "Ses petits sont les marcassins.", ["la laie", "une laie"]],
+      ["a14", "qcm", 2, "Quel est le seul félin à vivre principalement en groupe ?", ["Le lion", "Le tigre", "Le léopard", "Le jaguar"], 0, "Les lions vivent en troupes."],
+      ["a15", "qcm", 3, "Combien de temps dure environ la gestation d'une éléphante ?", ["22 mois", "9 mois", "12 mois", "36 mois"], 0, "C'est la plus longue gestation des mammifères terrestres."],
+      ["a16", "qcm", 3, "Quel oiseau est capable de voler en arrière ?", ["Le colibri", "Le moineau", "Le martinet", "L'hirondelle"], 0, "Ses ailes battent jusqu'à plusieurs dizaines de fois par seconde."]
+    ],
+    art: [
+      ["l01", "qcm", 1, "Qui a peint « La Joconde » ?", ["Léonard de Vinci", "Michel-Ange", "Raphaël", "Botticelli"], 0, "Elle est exposée au musée du Louvre."],
+      ["l02", "qcm", 1, "Qui a écrit « Les Misérables » ?", ["Victor Hugo", "Émile Zola", "Alexandre Dumas", "Honoré de Balzac"], 0, "Le roman est publié en 1862."],
+      ["l03", "vf", 1, "« Le Petit Prince » a été écrit par Antoine de Saint-Exupéry.", VF, 0, "Il est publié en 1943, d'abord aux États-Unis."],
+      ["l04", "qcm", 1, "Quel peintre néerlandais s'est coupé une partie de l'oreille ?", ["Vincent van Gogh", "Rembrandt", "Vermeer", "Mondrian"], 0, "Cela se passe à Arles, en décembre 1888."],
+      ["l05", "texte", 2, "Quel écrivain a créé le détective Sherlock Holmes ?", null, "Arthur Conan Doyle", "Sherlock Holmes apparaît pour la première fois en 1887.", ["Conan Doyle", "Doyle"]],
+      ["l06", "qcm", 3, "Dans quel musée parisien sont exposés les grands « Nymphéas » de Monet ?", ["Le musée de l'Orangerie", "Le musée du Louvre", "Le Centre Pompidou", "Le musée Rodin"], 0, "Deux salles ovales leur sont consacrées depuis 1927."],
+      ["l07", "rapide", 1, "Qui a écrit « Roméo et Juliette » ?", ["William Shakespeare", "Molière", "Corneille", "Goethe"], 0, "La pièce date de la fin du XVIe siècle."],
+      ["l08", "qcm", 2, "Quel sculpteur français a réalisé « Le Penseur » ?", ["Auguste Rodin", "Camille Claudel", "Aristide Maillol", "Bartholdi"], 0, "Le Penseur est visible au musée Rodin, à Paris."],
+      ["l09", "vf", 2, "Molière est l'auteur du « Malade imaginaire ».", VF, 0, "C'est sa dernière pièce, créée en 1673."],
+      ["l10", "qcm", 2, "À quel mouvement artistique est associé Salvador Dalí ?", ["Le surréalisme", "L'impressionnisme", "Le cubisme", "Le fauvisme"], 0, "Ses montres molles sont devenues un symbole du surréalisme."],
+      ["l11", "qcm", 3, "Quel tableau de Monet a donné son nom à l'impressionnisme ?", ["Impression, soleil levant", "Les Nymphéas", "La Gare Saint-Lazare", "Les Coquelicots"], 0, "Un critique s'en moque en 1874 et le mot reste."],
+      ["l12", "rapide", 2, "Qui a écrit « Les Trois Mousquetaires » ?", ["Alexandre Dumas", "Victor Hugo", "Jules Verne", "Gustave Flaubert"], 0, "Le roman paraît en 1844."],
+      ["l13", "texte", 2, "Quel écrivain français a imaginé le capitaine Nemo et le Nautilus ?", null, "Jules Verne", "Dans « Vingt mille lieues sous les mers » (1870).", ["Verne"]],
+      ["l14", "qcm", 2, "Qui a peint le plafond de la chapelle Sixtine ?", ["Michel-Ange", "Raphaël", "Le Caravage", "Titien"], 0, "Il y travaille de 1508 à 1512."],
+      ["l15", "qcm", 3, "Quel poète a publié le recueil « Les Fleurs du mal » en 1857 ?", ["Charles Baudelaire", "Arthur Rimbaud", "Paul Verlaine", "Stéphane Mallarmé"], 0, "Le livre lui vaut un procès dès sa parution."],
+      ["l16", "qcm", 3, "Quel peintre norvégien a réalisé « Le Cri » ?", ["Edvard Munch", "Gustav Klimt", "Egon Schiele", "Paul Gauguin"], 0, "Il en a peint plusieurs versions à partir de 1893."]
+    ]
+  };
+  const POINTS = { 1: 100, 2: 200, 3: 300 };
+  const questions = [];
+  for (const cat of CATS) for (const [id, type, diff, q, opts, answer, expl, aliases] of Q[cat.id]) {
+    questions.push({ id, cat: cat.id, type, diff, q, opts: opts ? opts.slice() : null, answer, expl, aliases: aliases || [], time: type === "texte" ? 25 : type === "rapide" ? 15 : 20, points: POINTS[diff] });
+  }
+  return { cats: CATS, questions };
+});
