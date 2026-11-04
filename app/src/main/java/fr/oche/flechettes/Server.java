@@ -272,6 +272,11 @@ class Server extends Thread {
                 btsRelay(sock, in, sock.getOutputStream(), wsKey, local, query, "", 8192);
                 return;
             }
+            if (path.equals("/sg-ws") && method.equals("GET") && wsKey != null && upgrade != null && upgrade.equalsIgnoreCase("websocket")) {
+                // AU-DELÀ DE LA PORTE : même relais, salles séparées
+                btsRelay(sock, in, sock.getOutputStream(), wsKey, local, query, "SG:", 8192);
+                return;
+            }
             if (path.equals("/qs-ws") && method.equals("GET") && wsKey != null && upgrade != null && upgrade.equalsIgnoreCase("websocket")) {
                 // QUIZ SHOW : même relais que le Blind Test, salles séparées
                 btsRelay(sock, in, sock.getOutputStream(), wsKey, local, query, "QS:", 8192);
@@ -365,6 +370,18 @@ class Server extends Thread {
                 case "/blind-test-show.html":
                 case "/blindtest":
                     send(out, 200, "text/html; charset=utf-8", local ? btsPage() : asset("blind-test-show.html"));
+                    break;
+                case "/porte":
+                case "/porte.html":
+                    send(out, 200, "text/html; charset=utf-8", local ? sgPage() : asset("porte.html"));
+                    break;
+                case "/sg-engine.js":
+                    send(out, 200, "application/javascript; charset=utf-8", asset("sg-engine.txt"));
+                    break;
+                case "/sg-missions.js":
+                    // les missions contiennent les secrets et les réponses des énigmes : réservées à la télé
+                    if (!local) { send(out, 403, "text/plain", bytes("forbidden")); return; }
+                    send(out, 200, "application/javascript; charset=utf-8", asset("sg-missions.txt"));
                     break;
                 case "/quiz-show":
                 case "/quiz-show.html":
@@ -480,6 +497,18 @@ class Server extends Thread {
         StringBuilder js = new StringBuilder("<script>window.QS_HOST={tv:true,");
         if (ip != null) js.append("publicUrl:'http://").append(ip).append(':').append(port).append("/quiz-show',");
         js.append("wsUrl:'ws://127.0.0.1:").append(port).append("/qs-ws'};</script>");
+        int h = html.indexOf("<head>");
+        html = h < 0 ? js + html : html.substring(0, h + 6) + js + html.substring(h + 6);
+        return html.getBytes(StandardCharsets.UTF_8);
+    }
+
+    /** Page AU-DELÀ DE LA PORTE pour la télé : rôle « télé », adresse pour le QR code et relais local. */
+    private byte[] sgPage() throws IOException {
+        String html = new String(asset("porte.html"), StandardCharsets.UTF_8);
+        String ip = lanIp();
+        StringBuilder js = new StringBuilder("<script>window.SG_HOST={tv:true,");
+        if (ip != null) js.append("publicUrl:'http://").append(ip).append(':').append(port).append("/porte',");
+        js.append("wsUrl:'ws://127.0.0.1:").append(port).append("/sg-ws'};</script>");
         int h = html.indexOf("<head>");
         html = h < 0 ? js + html : html.substring(0, h + 6) + js + html.substring(h + 6);
         return html.getBytes(StandardCharsets.UTF_8);
