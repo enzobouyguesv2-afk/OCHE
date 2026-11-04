@@ -1,0 +1,672 @@
+/* AU-DELÀ DE LA PORTE — moteur narratif coopératif (autorité de la partie). Tourne sur la télé.
+   Les téléphones n'envoient que des actions (prêt, vote, réponse d'énigme, pouvoir, équipement).
+   Le moteur décide seul : votes, jets de réussite, énigmes, ressources, événements, fins.
+   Une information confidentielle n'est placée que dans la vue du joueur dont le rôle y donne droit.
+   Les réponses des énigmes ne quittent jamais la télé. Toutes les fonctions temporelles reçoivent « now » (ms).
+   Servi sous /sg-engine.js. */
+(function (root, factory) {
+  const M = factory();
+  if (typeof module === "object" && module.exports) module.exports = M; else root.SG = M;
+})(typeof self !== "undefined" ? self : this, function () {
+  "use strict";
+
+  const DEFAULT_CONFIG = {
+    mission: "m1", difficulty: "normale", duration: "normale", roleMode: "auto", voteMode: "chef",
+    maxPlayers: 8, sound: true, music: true, volume: 70, anim: true
+  };
+  const DIFF = {
+    facile: { name: "Facile", integ: 100, temps: 2, dmg: 0.7, chk: 0.15, att: 4, ev: 0.7 },
+    normale: { name: "Normale", integ: 90, temps: 0, dmg: 1, chk: 0, att: 3, ev: 1 },
+    difficile: { name: "Difficile", integ: 80, temps: -1, dmg: 1.25, chk: -0.1, att: 3, ev: 1.2 },
+    expert: { name: "Expert", integ: 70, temps: -2, dmg: 1.5, chk: -0.2, att: 2, ev: 1.4 }
+  };
+  const DUR = {
+    courte: { name: "Courte", read: 25000, vote: 45000, puzzle: 120000, out: 12000, brief: 60000 },
+    normale: { name: "Normale", read: 40000, vote: 75000, puzzle: 180000, out: 16000, brief: 90000 },
+    longue: { name: "Longue", read: 60000, vote: 110000, puzzle: 240000, out: 20000, brief: 120000 }
+  };
+  const BASES = { chef: "Chef d'équipe", sci: "Scientifique", arch: "Archéologue", guer: "Guerrier" };
+  const POWERS = {
+    ordre: { name: "ORDRE DE MISSION", icon: "🎖️", charges: 1, steps: ["vote"], desc: "Votre vote devient décisif pour ce vote, quel que soit le résultat." },
+    scan: { name: "SCAN APPROFONDI", icon: "🔬", charges: 2, steps: ["narr", "vote", "puzzle"], desc: "Analyse cachée de la scène et chances de réussite de chaque option. Vous seul la voyez." },
+    memoire: { name: "MÉMOIRE DES ANCIENS", icon: "📜", charges: 2, steps: ["narr", "vote", "puzzle"], desc: "Un souvenir de vos recherches éclaire la situation. Vous seul le voyez." },
+    intervention: { name: "INTERVENTION TACTIQUE", icon: "🛡️", charges: 2, steps: ["narr", "vote", "puzzle"], desc: "Vous couvrez l'équipe : la prochaine perte d'intégrité dans cette scène est annulée." },
+    soins: { name: "SOINS D'URGENCE", icon: "⚕️", charges: 2, steps: ["narr", "vote", "puzzle", "outcome"], desc: "Vous soignez l'équipe : +15 d'intégrité." },
+    recon: { name: "RECONNAISSANCE", icon: "🔭", charges: 2, steps: ["vote"], desc: "Vous repérez les options dangereuses de ce vote. Vous seul le voyez." },
+    traduction: { name: "TRADUCTION", icon: "🗝️", charges: 2, steps: ["narr", "vote", "puzzle"], desc: "Vous déchiffrez une information réservée à un autre spécialiste. Vous seul la voyez." },
+    reparation: { name: "RÉPARATION", icon: "🔧", charges: 2, steps: ["narr", "vote", "puzzle", "outcome"], desc: "Vous remettez du matériel en état : +15 d'énergie." }
+  };
+  const ROLES = {
+    commandant: { name: "Commandant de terrain", icon: "🎖️", color: "#f5c542", bases: ["chef", "guer"], powers: ["ordre", "intervention"], desc: "Vous dirigez l'équipe et assurez sa sécurité. Vous tranchez les égalités." },
+    specialiste: { name: "Spécialiste", icon: "🔬", color: "#38bdf8", bases: ["sci", "arch"], powers: ["scan", "memoire"], desc: "Science et archéologie : vous lisez les machines comme les inscriptions." },
+    chef: { name: "Chef d'équipe", icon: "🎖️", color: "#f5c542", bases: ["chef"], powers: ["ordre"], desc: "Vous dirigez la mission. Vous recevez les ordres du commandement et tranchez les égalités." },
+    sci: { name: "Scientifique", icon: "🔬", color: "#38bdf8", bases: ["sci"], powers: ["scan"], desc: "Énergie, technologie, mesures : vous voyez ce que les instruments révèlent." },
+    arch: { name: "Archéologue", icon: "📜", color: "#c084fc", bases: ["arch"], powers: ["memoire"], desc: "Langues, symboles, cultures : vous lisez le passé des mondes visités." },
+    guer: { name: "Guerrier", icon: "🛡️", color: "#f87171", bases: ["guer"], powers: ["intervention"], desc: "Sécurité, terrain, menaces : vous protégez l'équipe." },
+    medecin: { name: "Médecin", icon: "⚕️", color: "#4ade80", bases: ["sci"], powers: ["soins"], desc: "Variante du scientifique : vous partagez ses informations et soignez l'équipe." },
+    eclaireur: { name: "Éclaireur", icon: "🔭", color: "#fb923c", bases: ["guer"], powers: ["recon"], desc: "Variante du guerrier : vous partagez ses informations et repérez les dangers." },
+    linguiste: { name: "Linguiste", icon: "🗝️", color: "#e879f9", bases: ["arch"], powers: ["traduction"], desc: "Variante de l'archéologue : vous partagez ses informations et déchiffrez celles des autres." },
+    ingenieur: { name: "Ingénieur", icon: "🔧", color: "#22d3ee", bases: ["sci"], powers: ["reparation"], desc: "Variante du scientifique : vous partagez ses informations et réparez le matériel." }
+  };
+  const SLOTS = {
+    2: ["commandant", "specialiste"],
+    3: ["commandant", "sci", "arch"],
+    4: ["chef", "sci", "arch", "guer"],
+    5: ["chef", "sci", "arch", "guer", "medecin"],
+    6: ["chef", "sci", "arch", "guer", "medecin", "eclaireur"],
+    7: ["chef", "sci", "arch", "guer", "medecin", "eclaireur", "linguiste"],
+    8: ["chef", "sci", "arch", "guer", "medecin", "eclaireur", "linguiste", "ingenieur"]
+  };
+  const EQUIP = {
+    kit: { name: "Kit médical", icon: "⚕️", desc: "+15 d'intégrité au départ." },
+    generateur: { name: "Générateur portable", icon: "🔋", desc: "+20 d'énergie au départ." },
+    scanner: { name: "Scanner amélioré", icon: "📡", desc: "+1 utilisation du SCAN APPROFONDI." },
+    lexique: { name: "Lexique des Anciens", icon: "📖", desc: "+1 utilisation de MÉMOIRE DES ANCIENS." }
+  };
+  const RES = { integrite: "Intégrité", energie: "Énergie", temps: "Temps", menace: "Menace", donnees: "Données" };
+  const RES_MAX = { integrite: 100, energie: 100, temps: 12, menace: 5, donnees: 100 };
+  const ENDINGS = {
+    parfaite: { name: "RÉUSSITE PARFAITE", color: "#4ade80", icon: "★" },
+    partielle: { name: "RÉUSSITE PARTIELLE", color: "#38bdf8", icon: "◐" },
+    controle: { name: "ÉCHEC CONTRÔLÉ", color: "#f5c542", icon: "↩" },
+    critique: { name: "ÉCHEC CRITIQUE", color: "#f87171", icon: "✖" },
+    exceptionnelle: { name: "DÉCOUVERTE EXCEPTIONNELLE", color: "#e879f9", icon: "✦" }
+  };
+  const COLORS = ["#38bdf8", "#f472b6", "#facc15", "#4ade80", "#a78bfa", "#fb923c", "#22d3ee", "#f87171"];
+  const AVATARS = ["🦅", "🐺", "🦊", "🐻", "🦉", "🐍", "🦂", "🐆", "🦬", "🐉", "🌙", "☀️", "⭐", "🔥", "❄️", "⚡"];
+  const MIN_PLAYERS = 2;
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  function clean(s, max) { return String(s == null ? "" : s).replace(/[\u0000-\u001f\u007f<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max); }
+  function mulberry(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  const normCode = s => String(s == null ? "" : s).toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+  class Game {
+    constructor(opts) {
+      opts = opts || {};
+      this.missions = opts.missions || {};
+      this.st = {
+        v: 1, room: "", seq: 0, phase: "lobby", paused: false, pauseAt: 0, pauseWhy: "",
+        config: Object.assign({}, DEFAULT_CONFIG, opts.config || {}),
+        players: {}, order: [], seed: (opts.seed != null ? opts.seed : Math.floor(Math.random() * 2 ** 31)) >>> 0, rngN: 0,
+        mission: null, res: null, flags: {}, items: {}, used: {}, visited: [], scene: null, step: null,
+        ready: {}, reveals: {}, powerUse: {}, shield: false, announce: null, journal: [], decisions: [],
+        stats: null, ending: null, equip: null, resume: null, eventsSeen: {}, lastEventScene: -9,
+        prog: opts.prog || null, startedAt: 0
+      };
+    }
+    /* ---------- utilitaires ---------- */
+    rand() { const r = mulberry(this.st.seed + this.st.rngN * 7919)(); this.st.rngN++; return r; }
+    bump() { this.st.seq++; }
+    M() { return this.missions[this.st.mission]; }
+    sc(id) { const m = this.M(); return m && m.scenes[id || this.st.scene]; }
+    dur() { return DUR[this.st.config.duration] || DUR.normale; }
+    diff() { return DIFF[this.st.config.difficulty] || DIFF.normale; }
+    activePlayers() { return this.st.order.map(id => this.st.players[id]).filter(Boolean); }
+    online() { return this.activePlayers().filter(p => p.online); }
+    has(pid, base) { const p = this.st.players[pid]; return !!(p && p.role && ROLES[p.role].bases.includes(base)); }
+    present(base, onlineOnly) { return this.activePlayers().some(p => p.role && ROLES[p.role].bases.includes(base) && (!onlineOnly || p.online)); }
+    holderName(base) { const p = this.activePlayers().find(p => p.role && ROLES[p.role].bases.includes(base)); return p ? p.name : ""; }
+    cond(c) {
+      if (!c) return true;
+      const S = this.st;
+      if (c.flags && !c.flags.every(f => S.flags[f])) return false;
+      if (c.notFlags && c.notFlags.some(f => S.flags[f])) return false;
+      if (c.items && !c.items.every(i => S.items[i])) return false;
+      if (c.notItems && c.notItems.some(i => S.items[i])) return false;
+      if (c.min && Object.keys(c.min).some(k => !(S.res[k] >= c.min[k]))) return false;
+      if (c.max && Object.keys(c.max).some(k => !(S.res[k] <= c.max[k]))) return false;
+      if (c.role && !this.present(c.role)) return false;
+      if (c.visited && !c.visited.every(v => S.visited.includes(v))) return false;
+      if (c.any && !c.any.some(x => this.cond(x))) return false;
+      if (c.not && this.cond(c.not)) return false;
+      return true;
+    }
+    pick(v) { if (Array.isArray(v)) return v.find(x => this.cond(x.if)) || null; return v == null ? null : v; }
+    txt(v) { const x = this.pick(v); return x == null ? "" : typeof x === "string" ? x : (x.text || ""); }
+    remain(now) { const s = this.st.step; if (!s || !s.until) return 0; return Math.max(0, s.until - (this.st.paused ? this.st.pauseAt : now)); }
+
+    /* ---------- configuration et joueurs ---------- */
+    applyConfig(c) {
+      const C = this.st.config;
+      for (const k of Object.keys(DEFAULT_CONFIG)) if (c && c[k] !== undefined) C[k] = c[k];
+      if (!DIFF[C.difficulty]) C.difficulty = "normale";
+      if (!DUR[C.duration]) C.duration = "normale";
+      if (!["auto", "choix"].includes(C.roleMode)) C.roleMode = "auto";
+      if (!["chef", "majorite"].includes(C.voteMode)) C.voteMode = "chef";
+      C.maxPlayers = clamp(Math.round(+C.maxPlayers || 8), 2, 8);
+      C.volume = clamp(Math.round(+C.volume || 0), 0, 100);
+      this.bump();
+    }
+    join(pid, m, now) {
+      const S = this.st, name = clean(m.name, 16);
+      let p = S.players[pid];
+      if (p) { p.online = true; p.lastSeen = now; if (name && S.phase === "lobby") p.name = name; if (m.avatar && S.phase === "lobby" && AVATARS.includes(m.avatar) && !this.activePlayers().some(o => o !== p && o.avatar === m.avatar)) p.avatar = m.avatar; this.bump(); return { ok: true, rejoin: true }; }
+      if (S.phase !== "lobby") return { ok: false, reason: "en_cours" };
+      if (!name) return { ok: false, reason: "nom" };
+      if (S.order.length >= S.config.maxPlayers) return { ok: false, reason: "pleine" };
+      const taken = new Set(this.activePlayers().map(o => o.avatar)), usedC = new Set(this.activePlayers().map(o => o.color));
+      let avatar = AVATARS.includes(m.avatar) && !taken.has(m.avatar) ? m.avatar : AVATARS.find(a => !taken.has(a)) || AVATARS[0];
+      let finalName = name, n = 2; while (this.activePlayers().some(o => o.name.toLowerCase() === finalName.toLowerCase())) finalName = name.slice(0, 13) + " " + n++;
+      p = { id: pid, name: finalName, avatar, color: COLORS.find(c => !usedC.has(c)) || COLORS[S.order.length % COLORS.length], online: true, lastSeen: now, joinedAt: now, role: null, want: null, key: "" };
+      S.players[pid] = p; S.order.push(pid); this.bump();
+      return { ok: true };
+    }
+    offline(pid) { const p = this.st.players[pid]; if (p && p.online) { p.online = false; this.bump(); } }
+    kick(pid, now) {
+      const S = this.st; if (!S.players[pid]) return false;
+      delete S.players[pid]; S.order = S.order.filter(x => x !== pid); delete S.ready[pid];
+      if (S.step && S.step.votes) delete S.step.votes[pid];
+      this.bump(); this.checkAll(now); return true;
+    }
+    /* ---------- lancement ---------- */
+    canStart() {
+      const n = this.activePlayers().length, m = this.missions[this.st.config.mission];
+      if (!m) return { ok: false, why: "Mission introuvable" };
+      if (n < MIN_PLAYERS) return { ok: false, why: "Il faut au moins " + MIN_PLAYERS + " joueurs (3 à 8 conseillés)" };
+      if (m.locked && !this.unlocked(m.id)) return { ok: false, why: "Mission verrouillée" };
+      if (this.st.config.difficulty === "expert" && !(this.st.prog && this.st.prog.expert)) return { ok: false, why: "Difficulté Expert verrouillée : réussissez d'abord deux missions ou faites une découverte exceptionnelle" };
+      return { ok: true };
+    }
+    unlocked() { return true; }
+    assignRoles() {
+      const S = this.st, ps = this.activePlayers(), n = ps.length, slots = SLOTS[n].slice(), out = {};
+      const order = ps.slice().sort(() => 0).map(p => p.id);
+      // 1. préférences (mode « choix ») dans l'ordre d'arrivée
+      if (S.config.roleMode === "choix") {
+        for (const pid of order) {
+          const w = S.players[pid].want; if (!w) continue;
+          let i = slots.findIndex(r => r === w); if (i < 0) i = slots.findIndex(r => ROLES[r].bases[0] === w); if (i < 0) i = slots.findIndex(r => ROLES[r].bases.includes(w));
+          if (i >= 0) { out[pid] = slots[i]; slots.splice(i, 1); }
+        }
+      }
+      // 2. le reste au hasard
+      const rest = order.filter(pid => !out[pid]);
+      for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(this.rand() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+      rest.forEach((pid, i) => out[pid] = slots[i]);
+      ps.forEach(p => {
+        p.role = out[p.id];
+        p.charges = {}; ROLES[p.role].powers.forEach(pw => p.charges[pw] = POWERS[pw].charges);
+      });
+    }
+    start(now, missionId) {
+      const S = this.st; if (missionId) S.config.mission = missionId;
+      const r = this.canStart(); if (!r.ok) return r;
+      S.mission = S.config.mission; const m = this.M(), D = this.diff();
+      this.assignRoles();
+      S.res = { integrite: D.integ, energie: m.start.energie, temps: clamp(m.start.temps + D.temps, 2, 12), menace: m.start.menace || 0, donnees: m.start.donnees || 0 };
+      S.flags = {}; S.items = {}; S.used = {}; S.visited = []; S.scene = null; S.journal = []; S.decisions = []; S.reveals = {}; S.powerUse = {};
+      S.ending = null; S.equip = null; S.resume = null; S.eventsSeen = {}; S.lastEventScene = -9; S.shield = false; S.announce = null;
+      S.stats = { puzzlesOk: 0, puzzlesKo: 0, checksOk: 0, checksKo: 0, powers: 0, events: 0, scenes: 0, votes: 0 };
+      S.startedAt = now; S.ready = {}; S.paused = false;
+      S.phase = "roles"; S.step = { kind: "roles", until: now + 30000, len: 30000, minAt: now + 3000 };
+      this.bump(); return { ok: true };
+    }
+    toLobby() {
+      const S = this.st; S.phase = "lobby"; S.step = null; S.paused = false; S.mission = null; S.ending = null; S.ready = {};
+      this.activePlayers().forEach(p => { p.role = null; p.charges = null; });
+      this.bump();
+    }
+    /* ---------- pause ---------- */
+    pause(now, why) { const S = this.st; if (S.paused || S.phase === "lobby" || S.phase === "ending") return false; S.paused = true; S.pauseAt = now; S.pauseWhy = why || "organisateur"; this.bump(); return true; }
+    resume(now) {
+      const S = this.st; if (!S.paused) return false;
+      const d = Math.max(0, now - S.pauseAt);
+      if (S.step) { if (S.step.until) S.step.until += d; if (S.step.minAt) S.step.minAt += d; }
+      S.paused = false; S.pauseWhy = ""; this.bump(); return true;
+    }
+    /* ---------- messages des téléphones ---------- */
+    handle(pid, m, now) {
+      const S = this.st, p = S.players[pid];
+      if (!m || typeof m.type !== "string") return { ok: false };
+      if (m.type === "hello") return this.join(pid, m, now);
+      if (!p) return { ok: false, rejoin: true };
+      p.lastSeen = now; if (!p.online) { p.online = true; this.bump(); }
+      if (m.type === "ping") return { ok: true };
+      if (m.type === "want") {
+        if (S.phase !== "lobby") return { ok: false, reason: "en_cours" };
+        p.want = BASES[m.role] ? m.role : null; this.bump(); return { ok: true };
+      }
+      if (S.paused) return { ok: false, reason: "pause" };
+      switch (m.type) {
+        case "ready": return this.setReady(pid, now);
+        case "equip": return this.chooseEquip(pid, m.item, now);
+        case "vote": return this.vote(pid, m.choice, now);
+        case "answer": return this.answer(pid, m.answer, now);
+        case "power": return this.usePower(pid, m.power, now);
+      }
+      return { ok: false, reason: "inconnu" };
+    }
+    setReady(pid, now) {
+      const S = this.st, k = S.step && S.step.kind;
+      if (!["roles", "briefing", "narr", "outcome", "event"].includes(k)) return { ok: false, reason: "pas_maintenant" };
+      if (!S.ready[pid]) { S.ready[pid] = true; this.bump(); }
+      this.checkAll(now); return { ok: true };
+    }
+    allReady() { const on = this.online(); return on.length > 0 && on.every(p => this.st.ready[p.id]); }
+    equipChoices() {
+      const pr = this.st.prog || {}, ids = ["kit"].concat(pr.equip || []);
+      return Object.keys(EQUIP).filter(k => ids.includes(k));
+    }
+    chooseEquip(pid, item, now) {
+      const S = this.st;
+      if (S.phase !== "briefing") return { ok: false, reason: "pas_maintenant" };
+      if (!this.has(pid, "chef")) return { ok: false, reason: "chef" };
+      if (!this.equipChoices().includes(item)) return { ok: false, reason: "verrouille" };
+      S.equip = item; this.bump(); return { ok: true };
+    }
+    /* ---------- moteur des étapes ---------- */
+    tick(now) {
+      const S = this.st; if (S.paused || !S.step) return;
+      const s = S.step;
+      if (s.until && now >= s.until) return this.advance(now, true);
+      this.checkAll(now);
+    }
+    checkAll(now) {
+      const S = this.st, s = S.step; if (!s || S.paused) return;
+      if (s.minAt && now < s.minAt) return;
+      if (["roles", "briefing", "narr", "outcome", "event"].includes(s.kind) && this.allReady()) return this.advance(now);
+      if (s.kind === "vote") { const on = this.online(); if (on.length && on.every(p => s.votes[p.id])) return this.advance(now); }
+    }
+    // Passe à l'étape suivante (fin du chrono, tout le monde prêt, ou décision de l'organisateur).
+    advance(now, timeout) {
+      const S = this.st, s = S.step; if (!s) return false;
+      switch (s.kind) {
+        case "roles": S.phase = "briefing"; S.ready = {}; S.equip = S.equip || "kit"; S.step = { kind: "briefing", until: now + this.dur().brief, len: this.dur().brief, minAt: now + 5000 }; break;
+        case "briefing": this.applyEquip(); S.phase = "gate"; S.ready = {}; S.step = { kind: "gate", until: now + 13000, len: 13000}; break;
+        case "gate": S.phase = "scene"; this.enterScene(this.M().startScene, now); break;
+        case "narr": this.afterNarr(now); break;
+        case "vote": this.closeVote(now); break;
+        case "puzzle": this.puzzleFail(now, timeout ? "temps" : "abandon"); break;
+        case "outcome": this.afterOutcome(now); break;
+        case "event": this.goNext(s.next, now); break;
+        default: return false;
+      }
+      this.bump(); return true;
+    }
+    applyEquip() {
+      const S = this.st, e = S.equip || "kit"; S.items["eq_" + e] = true;
+      if (e === "kit") S.res.integrite = Math.min(100, S.res.integrite + 15);
+      if (e === "generateur") S.res.energie = Math.min(100, S.res.energie + 20);
+      const add = (pw) => this.activePlayers().forEach(p => { if (p.charges && p.charges[pw] != null) p.charges[pw]++; });
+      if (e === "scanner") add("scan");
+      if (e === "lexique") add("memoire");
+      S.journal.push({ kind: "equip", text: "Équipement emporté : " + EQUIP[e].name });
+    }
+    enterScene(id, now) {
+      const S = this.st, sc = this.sc(id);
+      if (!sc) throw new Error("Scène inconnue : " + id);
+      S.scene = id; S.visited.push(id); S.reveals = {}; S.powerUse = {}; S.shield = false; S.ready = {}; S.announce = null; S.stats.scenes++;
+      if (sc.enter) this.applyOutcome(this.pick(sc.enter) || {}, null);
+      S.step = { kind: "narr", until: now + this.dur().read, len: this.dur().read, minAt: now + 4000 };
+      if (S.res.integrite <= 0) { this.finish(now); }
+    }
+    choicesFor(sc) {
+      return (sc.choices || []).filter(c => !(c.once && this.st.used[this.st.scene + ":" + c.id]) && this.cond(c.req) && (!c.cost || Object.keys(c.cost).every(k => k === "menace" || this.st.res[k] + c.cost[k] >= 0)));
+    }
+    lockedChoices(sc) {
+      return (sc.choices || []).filter(c => !(c.once && this.st.used[this.st.scene + ":" + c.id]) && c.showLocked && !this.choicesFor(sc).includes(c));
+    }
+    afterNarr(now) {
+      const S = this.st, sc = this.sc();
+      if (sc.puzzle) { S.step = { kind: "puzzle", attempts: Math.max(1, (sc.puzzle.attempts || 3) + (this.diff().att - 3)), max: 0, tries: [], until: now + this.dur().puzzle, len: this.dur().puzzle, minAt: 0 }; S.step.max = S.step.attempts; return; }
+      const ch = this.choicesFor(sc);
+      if (ch.length) { S.step = { kind: "vote", choices: ch.map(c => c.id), votes: {}, ordre: null, until: now + this.dur().vote, len: this.dur().vote, minAt: now + 6000 }; return; }
+      if (sc.auto) return this.showOutcome(this.pick(sc.auto), { now, label: null });
+      this.goNext(sc.next || "END", now);
+    }
+    chance(c) {
+      if (!c.check) return null;
+      const k = c.check; let p = k.chance + this.diff().chk;
+      if (k.item && this.st.items[k.item]) p += k.itemBonus || 0.2;
+      if (k.flag && this.st.flags[k.flag]) p += k.flagBonus || 0.2;
+      return p;
+    }
+    vote(pid, choice, now) {
+      const S = this.st, s = S.step;
+      if (!s || s.kind !== "vote") return { ok: false, reason: "ferme" };
+      if (!s.choices.includes(choice)) return { ok: false, reason: "option" };
+      s.votes[pid] = choice; this.bump(); this.checkAll(now); return { ok: true };
+    }
+    closeVote(now) {
+      const S = this.st, s = S.step, sc = this.sc(), tally = {};
+      s.choices.forEach(c => tally[c] = 0);
+      Object.values(s.votes).forEach(c => { if (tally[c] != null) tally[c]++; });
+      let winner = null, how = "majorite";
+      const chefVote = s.ordre && s.votes[s.ordre];
+      if (chefVote) { winner = chefVote; how = "ordre"; }
+      else {
+        const top = Math.max.apply(null, Object.values(tally)), tied = s.choices.filter(c => tally[c] === top);
+        if (top === 0) { winner = (sc.defaultChoice && s.choices.includes(sc.defaultChoice)) ? sc.defaultChoice : s.choices[s.choices.length - 1]; how = "defaut"; }
+        else if (tied.length === 1) winner = tied[0];
+        else {
+          const chef = this.activePlayers().find(p => this.has(p.id, "chef")), cv = chef && s.votes[chef.id];
+          if (S.config.voteMode === "chef" && cv && tied.includes(cv)) { winner = cv; how = "chef"; }
+          else { winner = tied[Math.floor(this.rand() * tied.length)]; how = "hasard"; }
+        }
+      }
+      S.stats.votes++;
+      const c = sc.choices.find(x => x.id === winner);
+      const voters = Object.keys(s.votes).filter(pid => s.votes[pid] === winner);
+      this.resolveChoice(c, now, { tally, how, voters });
+    }
+    resolveChoice(c, now, info) {
+      const S = this.st, sc = this.sc();
+      if (c.once) S.used[S.scene + ":" + c.id] = true;
+      const deltas = {};
+      if (c.cost) this.applyFx(c.cost, deltas, "cost");
+      if (!c.check && !c.outcome) {   // simple déplacement : pas d'écran de résultat
+        S.decisions.push({ scene: sc.title, choice: c.label, success: null, how: info.how });
+        S.lastMove = { label: c.label, deltas, tally: info.tally, how: info.how };
+        return this.goNext(c.next || sc.next || "END", now);
+      }
+      let out, success = null, chance = null, helped = false;
+      if (c.check) {
+        chance = this.chance(c);
+        if (c.check.role && info.voters.some(pid => this.has(pid, c.check.role))) { chance += 0.2; helped = true; }
+        chance = clamp(chance, 0.05, 0.95);
+        success = this.rand() < chance;
+        out = this.pick(success ? c.success : c.fail);
+        S.stats[success ? "checksOk" : "checksKo"]++;
+      } else out = this.pick(c.outcome);
+      S.decisions.push({ scene: sc.title, choice: c.label, success, how: info.how });
+      this.showOutcome(out || {}, { now, label: c.label, success, chance, helped, helpRole: c.check && c.check.role, tally: info.tally, how: info.how, deltas, next: c.next });
+    }
+    showOutcome(out, o) {
+      const S = this.st, sc = this.sc(), deltas = o.deltas || {};
+      this.applyOutcome(out, deltas);
+      S.ready = {};
+      S.step = {
+        kind: "outcome", label: o.label, text: out.text || "", success: o.success == null ? null : o.success, chance: o.chance, helped: !!o.helped, helpRole: o.helpRole || null,
+        tally: o.tally || null, how: o.how || null, deltas, next: out.next || o.next || sc.next || "END", until: o.now + this.dur().out, len: this.dur().out, minAt: o.now + 3500, shielded: !!out._shielded
+      };
+    }
+    applyOutcome(out, deltas) {
+      const S = this.st; deltas = deltas || {};
+      if (out.effects) this.applyFx(out.effects, deltas, "outcome", out);
+      (out.flags || []).forEach(f => S.flags[f] = true);
+      (out.unflags || []).forEach(f => delete S.flags[f]);
+      (out.items || []).forEach(i => { S.items[i] = true; deltas["+" + i] = 1; });
+      (out.loseItems || []).forEach(i => delete S.items[i]);
+      if (out.log) S.journal.push({ kind: out.log.kind || "note", text: out.log.text || out.log });
+      return deltas;
+    }
+    // Applique des effets sur les ressources, avec bouclier, difficulté et bornes.
+    applyFx(fx, deltas, src, out) {
+      const S = this.st, D = this.diff(), m = this.M();
+      for (const k of Object.keys(fx)) {
+        if (!(k in RES)) continue;
+        let v = fx[k];
+        if (k === "integrite" && v < 0) {
+          if (S.shield && src !== "cost") { S.shield = false; if (out) out._shielded = true; deltas.bouclier = 1; continue; }
+          v = Math.round(v * D.dmg);
+        }
+        const before = S.res[k];
+        let after = clamp(before + v, k === "integrite" ? -999 : 0, RES_MAX[k]);
+        if (src === "event") { if (k === "integrite") after = Math.max(after, Math.min(before, 20)); if (k === "temps") after = Math.max(after, Math.min(before, 1)); }
+        if (k === "integrite") after = Math.max(after, 0);
+        S.res[k] = after; deltas[k] = (deltas[k] || 0) + (after - before);
+        if (k === "energie" && m && m.energyThreat && after - before <= -10) { const b2 = S.res.menace; S.res.menace = clamp(b2 + 1, 0, 5); deltas.menace = (deltas.menace || 0) + (S.res.menace - b2); }
+      }
+    }
+    afterOutcome(now) {
+      const S = this.st, s = S.step, next = s.next;
+      if (S.res.integrite <= 0) return this.finish(now);
+      // événement aléatoire contrôlé (jamais deux scènes de suite, jamais sur une fin)
+      const m = this.M(), idx = S.visited.length;
+      if (next !== "END" && m.events && m.events.length && idx - S.lastEventScene >= 2 && !S.flags._noEvents) {
+        const p = Math.min(0.6, (0.18 + 0.08 * S.res.menace) * this.diff().ev);
+        const roll = this.rand();
+        if (roll < p) {
+          const pool = m.events.filter(e => !S.eventsSeen[e.id] && this.cond(e.cond));
+          if (pool.length) {
+            const e = pool[Math.floor(this.rand() * pool.length)]; S.eventsSeen[e.id] = true; S.lastEventScene = idx; S.stats.events++;
+            const deltas = {}; if (e.effects) this.applyFx(e.effects, deltas, "event");
+            (e.flags || []).forEach(f => S.flags[f] = true);
+            S.journal.push({ kind: "event", text: e.title });
+            S.ready = {}; S.step = { kind: "event", id: e.id, title: e.title, text: e.text, tone: e.tone || "alert", deltas, next, until: now + this.dur().out, len: this.dur().out, minAt: now + 3500 };
+            return;
+          }
+        }
+      }
+      this.goNext(next, now);
+    }
+    goNext(next, now) {
+      const S = this.st, m = this.M();
+      if (next === "$resume") { next = S.resume || "END"; S.resume = null; }
+      if (S.res.integrite <= 0) return this.finish(now);
+      if (next === "END") return this.finish(now);
+      if (S.res.temps <= 0 && m.timeoutScene && !S.visited.includes(m.timeoutScene) && next !== m.timeoutScene) { S.resume = next; return this.enterScene(m.timeoutScene, now); }
+      if (m.threatScene && S.res.menace >= (m.threatAt || 4) && !S.visited.includes(m.threatScene) && next !== m.threatScene && !(this.sc(next) || {}).noThreat) { S.resume = next; return this.enterScene(m.threatScene, now); }
+      this.enterScene(next, now);
+    }
+    /* ---------- énigmes ---------- */
+    solverOk(pid, pz) {
+      if (this.has(pid, pz.solver)) return true;
+      return !this.present(pz.solver, true);    // personne d'en ligne avec ce rôle : tout le monde peut répondre
+    }
+    answer(pid, ans, now) {
+      const S = this.st, s = S.step, sc = this.sc();
+      if (!s || s.kind !== "puzzle") return { ok: false, reason: "ferme" };
+      const pz = sc.puzzle;
+      if (!this.solverOk(pid, pz)) return { ok: false, reason: "solveur" };
+      let given, good, fb = "";
+      if (pz.type === "sequence") {
+        if (!Array.isArray(ans)) return { ok: false, reason: "format" };
+        given = ans.slice(0, 12).map(String);
+        const ids = pz.options.map(o => o.id);
+        if (given.length !== pz.answer.length || given.some(x => !ids.includes(x))) return { ok: false, reason: "longueur" };
+        const well = given.filter((x, i) => x === pz.answer[i]).length; good = well === pz.answer.length;
+        fb = well + " élément" + (well > 1 ? "s" : "") + " sur " + pz.answer.length + " à la bonne place";
+      } else if (pz.type === "code") {
+        given = normCode(ans).slice(0, 12);
+        if (given.length !== String(pz.answer).length) return { ok: false, reason: "longueur" };
+        const a = String(pz.answer), well = given.split("").filter((x, i) => x === a[i]).length; good = given === a;
+        fb = well + " caractère" + (well > 1 ? "s" : "") + " sur " + a.length + " à la bonne place";
+      } else {
+        given = String(ans); if (!pz.options.some(o => o.id === given)) return { ok: false, reason: "format" };
+        good = given === pz.answer; fb = "Ce n'est pas la bonne réponse";
+      }
+      if (good) { S.stats.puzzlesOk++; S.decisions.push({ scene: sc.title, choice: "Énigme résolue", success: true }); this.showOutcome(this.pick(pz.success) || {}, { now, label: "Énigme résolue", success: true }); this.bump(); return { ok: true, good: true }; }
+      s.attempts--; s.tries.push({ by: S.players[pid].name, given, fb });
+      if (pz.failAttempt) { const d = {}; this.applyFx(pz.failAttempt.effects || {}, d, "outcome"); s.lastDeltas = d; }
+      if (s.attempts <= 0 || S.res.integrite <= 0) this.puzzleFail(now, "essais");
+      this.bump(); return { ok: true, good: false, fb, left: s.attempts };
+    }
+    puzzleFail(now, why) {
+      const S = this.st, pz = this.sc().puzzle; S.stats.puzzlesKo++;
+      S.decisions.push({ scene: this.sc().title, choice: "Énigme échouée", success: false });
+      this.showOutcome(this.pick(pz.fail) || {}, { now, label: why === "temps" ? "Temps écoulé" : why === "abandon" ? "Énigme abandonnée" : "Plus d'essais", success: false });
+    }
+    /* ---------- pouvoirs ---------- */
+    usePower(pid, pw, now) {
+      const S = this.st, p = S.players[pid], P = POWERS[pw], s = S.step;
+      if (!P || !p.charges || p.charges[pw] == null) return { ok: false, reason: "role" };
+      if (S.phase !== "scene" || !s || !P.steps.includes(s.kind)) return { ok: false, reason: "pas_maintenant" };
+      if (p.charges[pw] <= 0) return { ok: false, reason: "epuise" };
+      const key = pid + ":" + pw; if (S.powerUse[key]) return { ok: false, reason: "deja" };
+      const sc = this.sc(), rv = S.reveals[pid] = S.reveals[pid] || [];
+      switch (pw) {
+        case "ordre": if (S.step.ordre) return { ok: false, reason: "deja" }; s.ordre = pid; break;
+        case "scan": {
+          let t = this.txt(sc.scan) || (sc.puzzle && sc.puzzle.scan) || "Aucune anomalie notable : les relevés confirment ce que vous voyez.";
+          const ch = this.choicesFor(sc).filter(c => c.check);
+          if (ch.length && !sc.puzzle) t += " — Probabilités de réussite : " + ch.map(c => "« " + c.label + " » " + Math.round(clamp(this.chance(c), 0.05, 0.95) * 100) + " %" + (c.check.role ? " (+20 % si un " + BASES[c.check.role].toLowerCase() + " vote pour)" : "")).join(" ; ") + ".";
+          rv.push({ icon: P.icon, title: "Scan approfondi", text: t }); break;
+        }
+        case "memoire": case "traduction": {
+          let t;
+          if (pw === "memoire") t = this.txt(sc.memory) || (sc.puzzle && sc.puzzle.hint) || "Rien dans vos souvenirs ne correspond à ce lieu. Fiez-vous aux autres spécialistes.";
+          else {
+            const mine = ROLES[p.role].bases, others = Object.keys(BASES).filter(b => !mine.includes(b));
+            const src = sc.puzzle && sc.puzzle.clues ? sc.puzzle.clues : sc.secrets || {};
+            const cand = others.filter(b => this.txt(src[b]));
+            if (cand.length) { const b = cand[Math.floor(this.rand() * cand.length)]; t = "Information du " + BASES[b].toLowerCase() + " : " + this.txt(src[b]); }
+            else t = this.txt(sc.memory) || "Aucune inscription à traduire ici.";
+          }
+          rv.push({ icon: P.icon, title: P.name === "TRADUCTION" ? "Traduction" : "Mémoire des Anciens", text: t }); break;
+        }
+        case "recon": {
+          const ch = this.choicesFor(sc), list = ch.map(c => "« " + c.label + " » : " + (c.danger || (c.check && this.chance(c) < 0.5) ? "DANGEREUX" : "sans danger visible"));
+          rv.push({ icon: P.icon, title: "Reconnaissance", text: (this.txt(sc.recon) ? this.txt(sc.recon) + " — " : "") + list.join(" ; ") + "." }); break;
+        }
+        case "intervention": S.shield = true; break;
+        case "soins": { const b = S.res.integrite; S.res.integrite = Math.min(100, b + 15); if (S.res.integrite === b) return { ok: false, reason: "inutile" }; break; }
+        case "reparation": { const b = S.res.energie; S.res.energie = Math.min(100, b + 15); if (S.res.energie === b) return { ok: false, reason: "inutile" }; break; }
+      }
+      p.charges[pw]--; S.powerUse[key] = true; S.stats.powers++;
+      S.announce = { at: now, id: S.seq + 1, pw, icon: P.icon, text: p.name + " utilise " + P.name };
+      S.journal.push({ kind: "power", text: p.name + " — " + P.name + " (" + sc.title + ")" });
+      this.bump(); return { ok: true };
+    }
+    /* ---------- fin de mission ---------- */
+    finish(now) {
+      const S = this.st, m = this.M();
+      let e = null;
+      if (S.res.integrite <= 0) e = m.endings.find(x => x.type === "critique" && x.dead) || m.endings.find(x => x.type === "critique");
+      if (!e) e = m.endings.find(x => !x.dead && this.cond(x.cond)) || m.endings[m.endings.length - 1];
+      const sec = (m.secondaries || []).map(x => ({ text: x.text, ok: this.cond(x.cond) }));
+      const codex = (m.codex || []).filter(c => this.cond(c.cond)).map(c => ({ id: c.id, title: c.title, text: c.text }));
+      const okSec = sec.filter(x => x.ok).length;
+      const base = { exceptionnelle: 95, parfaite: 85, partielle: 65, controle: 40, critique: 10 }[e.type];
+      const score = clamp(Math.round(base + (S.res.integrite - 50) / 10 + okSec * 3 + S.stats.puzzlesOk * 2 - S.stats.puzzlesKo * 2), 0, 100);
+      const grade = score >= 92 ? "S" : score >= 80 ? "A" : score >= 62 ? "B" : score >= 40 ? "C" : "D";
+      S.phase = "ending";
+      S.step = { kind: "ending" };
+      S.ending = { type: e.type, title: e.title, text: e.text, name: ENDINGS[e.type].name, res: Object.assign({}, S.res), sec, codex, score, grade, decisions: S.decisions.slice(-12), stats: Object.assign({}, S.stats), minutes: Math.max(1, Math.round((now - S.startedAt) / 60000)), mission: m.id, unlocks: [] };
+      if (S.prog) S.ending.unlocks = applyProgress(S.prog, S.ending, m);
+      this.bump();
+    }
+    /* ---------- vues ---------- */
+    scenePublic() {
+      const S = this.st, sc = this.sc(); if (!sc) return null;
+      return { id: S.scene, title: sc.title, env: sc.env, text: sc.text, radio: sc.radio || null, n: S.visited.length };
+    }
+    publicStep(now) {
+      const S = this.st, s = S.step; if (!s) return null;
+      const out = { kind: s.kind, remain: this.remain(now), len: s.len || 0 };
+      const sc = this.sc();
+      if (s.kind === "vote") {
+        out.choices = s.choices.map(id => { const c = sc.choices.find(x => x.id === id); return { id, label: c.label, desc: c.desc || "", tags: this.tags(c) }; });
+        out.locked = this.lockedChoices(sc).map(c => ({ label: c.label, why: c.lockedWhy || "Indisponible" }));
+        out.voted = Object.keys(s.votes).length; out.ordre = !!s.ordre;
+      }
+      if (s.kind === "puzzle") {
+        const pz = sc.puzzle;
+        out.puzzle = { type: pz.type, prompt: pz.prompt, display: pz.display, options: pz.options ? pz.options.map(o => ({ id: o.id, label: o.label, icon: o.icon || "" })) : null, length: pz.type === "code" ? String(pz.answer).length : pz.type === "sequence" ? pz.answer.length : 1, attempts: s.attempts, max: s.max, tries: s.tries.map(t => ({ by: t.by, fb: t.fb, given: t.given })), solver: pz.solver, solverName: BASES[pz.solver], holder: this.present(pz.solver, true) ? this.activePlayers().filter(p => p.online && this.has(p.id, pz.solver)).map(p => p.name).join(" ou ") : "toute l'équipe (spécialiste absent)" };
+      }
+      if (s.kind === "outcome") Object.assign(out, { label: s.label, text: s.text, success: s.success, chance: s.chance == null ? null : Math.round(s.chance * 100), helped: s.helped, helpRole: s.helpRole ? BASES[s.helpRole] : null, tally: s.tally ? Object.keys(s.tally).map(id => ({ label: sc.choices.find(x => x.id === id).label, n: s.tally[id], win: sc.choices.find(x => x.id === id).label === s.label })) : null, how: s.how, deltas: s.deltas, shielded: s.shielded });
+      if (s.kind === "event") Object.assign(out, { title: s.title, text: s.text, tone: s.tone, deltas: s.deltas });
+      return out;
+    }
+    tags(c) {
+      const t = [];
+      if (c.cost) Object.keys(c.cost).forEach(k => t.push((c.cost[k] > 0 ? "+" : "") + c.cost[k] + " " + RES[k].toLowerCase()));
+      if (c.check) t.push("risqué");
+      if (c.req && c.req.role) t.push("expertise : " + BASES[c.req.role].toLowerCase());
+      if (c.req && c.req.items) t.push("nécessite : " + c.req.items.map(i => (this.M().itemNames || {})[i] || i).join(", "));
+      return t;
+    }
+    team() {
+      const S = this.st, s = S.step;
+      return this.activePlayers().map(p => ({ id: p.id, name: p.name, avatar: p.avatar, color: p.color, online: p.online, role: p.role, roleName: p.role ? ROLES[p.role].name : "", roleIcon: p.role ? ROLES[p.role].icon : "", want: p.want, ready: !!S.ready[p.id], voted: !!(s && s.votes && s.votes[p.id]) }));
+    }
+    itemList() { const m = this.M() || {}, names = m.itemNames || {}; return Object.keys(this.st.items).filter(i => names[i] || i.startsWith("eq_")).map(i => i.startsWith("eq_") ? EQUIP[i.slice(3)].icon + " " + EQUIP[i.slice(3)].name : names[i]); }
+    tvView(now) {
+      const S = this.st, m = this.M();
+      return {
+        phase: S.phase, paused: S.paused, pauseWhy: S.pauseWhy, seq: S.seq, team: this.team(), config: S.config,
+        mission: m ? { id: m.id, code: m.code, name: m.name, env: m.env, briefing: m.briefing, diff: this.diff().name } : null,
+        res: S.res, items: m ? this.itemList() : [], scene: this.scenePublic(), step: this.publicStep(now), equip: S.equip, equipChoices: this.equipChoices(),
+        ending: S.ending, announce: S.announce, shield: S.shield, journal: S.journal.slice(-6)
+      };
+    }
+    secretsFor(pid) {
+      const S = this.st, p = S.players[pid], sc = this.sc(); if (!p || !p.role || !sc) return [];
+      const out = [];
+      ROLES[p.role].bases.forEach(b => {
+        const t = this.txt((sc.secrets || {})[b]); if (t) out.push({ role: BASES[b], text: t });
+        if (S.step && S.step.kind === "puzzle" && sc.puzzle.clues) { const c = this.txt(sc.puzzle.clues[b]); if (c) out.push({ role: BASES[b], text: c, clue: true }); }
+      });
+      return out;
+    }
+    viewFor(pid, now) {
+      const S = this.st, p = S.players[pid];
+      if (!p) return { phase: "unknown" };
+      const r = p.role ? ROLES[p.role] : null, m = this.M();
+      const v = {
+        phase: S.phase, paused: S.paused, pauseWhy: S.pauseWhy, cfg: { roleMode: S.config.roleMode, voteMode: S.config.voteMode },
+        me: { id: p.id, name: p.name, avatar: p.avatar, color: p.color, want: p.want, role: p.role, roleName: r ? r.name : "", roleIcon: r ? r.icon : "", roleColor: r ? r.color : "", roleDesc: r ? r.desc : "", bases: r ? r.bases : [], ready: !!S.ready[pid] },
+        team: this.team().map(t => ({ name: t.name, avatar: t.avatar, color: t.color, online: t.online, roleName: t.roleName, roleIcon: t.roleIcon, me: t.id === pid })),
+        mission: m ? { code: m.code, name: m.name } : null, res: S.res, remain: this.remain(now), len: S.step && S.step.len || 0
+      };
+      if (r) v.me.powers = r.powers.map(pw => ({ id: pw, name: POWERS[pw].name, icon: POWERS[pw].icon, desc: POWERS[pw].desc, left: p.charges ? p.charges[pw] : 0, steps: POWERS[pw].steps, usedHere: !!S.powerUse[pid + ":" + pw] }));
+      if (S.phase === "roles" && m) v.roleBrief = m.roleBrief ? this.txt(m.roleBrief[r.bases[0]]) || "" : "";
+      if (S.phase === "briefing" && m) {
+        v.briefing = { lines: m.briefing.lines, objectives: m.briefing.objectives, risks: m.briefing.risks };
+        v.privateBrief = r.bases.map(b => m.briefing.secret && m.briefing.secret[b] ? { role: BASES[b], text: m.briefing.secret[b] } : null).filter(Boolean);
+        v.equip = { chosen: S.equip, choices: this.equipChoices().map(k => ({ id: k, name: EQUIP[k].name, icon: EQUIP[k].icon, desc: EQUIP[k].desc })), mine: r.bases.includes("chef") };
+      }
+      if (S.phase === "scene") {
+        const sc = this.sc(), s = S.step, ps = this.publicStep(now);
+        v.scene = { id: S.scene, n: S.visited.length, title: sc.title, step: s.kind, remain: ps.remain, secrets: this.secretsFor(pid), reveals: S.reveals[pid] || [], shield: S.shield };
+        if (s.kind === "vote") { v.scene.vote = { choices: ps.choices, mine: s.votes[pid] || null, voted: ps.voted, total: this.online().length, ordre: s.ordre === pid, ordreOn: !!s.ordre }; }
+        if (s.kind === "puzzle") { const pz = ps.puzzle; v.scene.puzzle = Object.assign({}, pz, { canAnswer: this.solverOk(pid, sc.puzzle) }); }
+        if (s.kind === "outcome" || s.kind === "event") v.scene.result = ps;
+      }
+      if (S.phase === "ending") v.ending = S.ending;
+      return v;
+    }
+    /* ---------- sauvegarde ---------- */
+    save(now) { this.st.savedAt = now; return JSON.stringify(this.st); }
+    restore(json, now) {
+      let o; try { o = typeof json === "string" ? JSON.parse(json) : json; } catch (e) { return false; }
+      if (!o || o.v !== 1 || !o.config || !o.players) return false;
+      if (o.mission && !this.missions[o.mission]) return false;
+      const prog = this.st.prog; this.st = o; if (prog) this.st.prog = prog;
+      Object.values(o.players).forEach(p => p.online = false);
+      if (o.phase !== "lobby" && o.phase !== "ending") { o.paused = false; this.pause(now, "restauree"); }
+      this.bump(); return true;
+    }
+  }
+
+  /* ---------- progression (conservée sur la télé) ---------- */
+  function newProgress() { return { runs: 0, wins: 0, done: {}, codex: [], equip: [], expert: false }; }
+  const RANK = { critique: 0, controle: 1, partielle: 2, parfaite: 3, exceptionnelle: 4 };
+  function applyProgress(prog, end, m) {
+    const unl = [];
+    prog.runs = (prog.runs || 0) + 1; prog.done = prog.done || {}; prog.codex = prog.codex || []; prog.equip = prog.equip || [];
+    if (m.training) { if (!prog.done[m.id]) unl.push("Entraînement terminé : vous êtes prêts pour les vraies missions."); prog.done[m.id] = prog.done[m.id] && RANK[prog.done[m.id]] > RANK[end.type] ? prog.done[m.id] : end.type; return unl; }
+    const success = ["partielle", "parfaite", "exceptionnelle"].includes(end.type);
+    if (success) prog.wins = (prog.wins || 0) + 1;
+    const prev = prog.done[m.id]; if (!prev || RANK[end.type] > RANK[prev]) prog.done[m.id] = end.type;
+    end.codex.forEach(c => { if (!prog.codex.includes(c.id)) { prog.codex.push(c.id); unl.push("Archive débloquée : " + c.title); } });
+    const give = (k) => { if (!prog.equip.includes(k)) { prog.equip.push(k); unl.push("Nouvel équipement : " + EQUIP[k].name); } };
+    if (success) give("generateur");
+    if (prog.wins >= 2) give("scanner");
+    if (end.type === "exceptionnelle" || prog.wins >= 3) give("lexique");
+    if (!prog.expert && (end.type === "exceptionnelle" || prog.wins >= 2)) { prog.expert = true; unl.push("Difficulté EXPERT débloquée"); }
+    return unl;
+  }
+
+  /* ---------- contrôle d'une mission (outil de test) ---------- */
+  function checkMission(m) {
+    const errs = [], ids = Object.keys(m.scenes);
+    const okNext = n => n === "END" || n === "$resume" || m.scenes[n];
+    const walkOut = (o, where) => { if (!o) return; (Array.isArray(o) ? o : [o]).forEach(x => { if (x.next && !okNext(x.next)) errs.push(where + " → " + x.next); }); };
+    if (!m.scenes[m.startScene]) errs.push("startScene");
+    ids.forEach(id => {
+      const s = m.scenes[id];
+      if (!s.title || !s.text) errs.push(id + " : titre/texte");
+      if (s.next && !okNext(s.next)) errs.push(id + ".next → " + s.next);
+      (s.choices || []).forEach(c => { if (!c.label) errs.push(id + "." + c.id + " libellé"); if (c.next && !okNext(c.next)) errs.push(id + "." + c.id + " → " + c.next); walkOut(c.outcome, id + "." + c.id); walkOut(c.success, id + "." + c.id + "+"); walkOut(c.fail, id + "." + c.id + "-"); if (c.check && !(c.success && c.fail)) errs.push(id + "." + c.id + " check sans success/fail"); if (!c.check && !c.outcome && !c.next) errs.push(id + "." + c.id + " sans suite"); });
+      if (s.puzzle) { const p = s.puzzle; walkOut(p.success, id + " énigme+"); walkOut(p.fail, id + " énigme-"); if (!BASES[p.solver]) errs.push(id + " solveur"); if (p.type === "sequence" && !p.answer.every(a => p.options.some(o => o.id === a))) errs.push(id + " réponse hors options"); if (p.type === "choice" && !p.options.some(o => o.id === p.answer)) errs.push(id + " réponse hors options"); }
+      if (!s.puzzle && !(s.choices && s.choices.length) && !s.auto && !s.next) errs.push(id + " : impasse");
+      if (s.auto) walkOut(s.auto, id + ".auto");
+    });
+    ["parfaite", "partielle", "controle", "critique", "exceptionnelle"].forEach(t => { if (!m.endings.some(e => e.type === t)) errs.push("fin manquante " + t); });
+    return errs;
+  }
+
+  return { Game, ROLES, POWERS, BASES, SLOTS, EQUIP, RES, RES_MAX, ENDINGS, DIFF, DUR, AVATARS, DEFAULT_CONFIG, MIN_PLAYERS, newProgress, applyProgress, checkMission, RANK };
+});

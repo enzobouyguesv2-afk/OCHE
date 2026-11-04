@@ -1,0 +1,763 @@
+/* AU-DELÀ DE LA PORTE — missions (contenu original). Servi UNIQUEMENT à la télé (/sg-missions.js, accès local) :
+   il contient les informations confidentielles et les réponses des énigmes. */
+(function (root) {
+  "use strict";
+  const M = {};
+
+  /* =====================================================================================
+     ENTRAÎNEMENT
+     ===================================================================================== */
+  M.sim = {
+    id: "sim", code: "SIM-01", name: "Simulation d'entraînement", sub: "Apprendre les rôles, les votes et les énigmes", env: "base", training: true,
+    duration: "10 min", difficultyLabel: "Découverte",
+    briefing: {
+      time: "Salle d'entraînement — niveau 18",
+      lines: ["Avant d'ouvrir la Porte pour de vrai, le commandement vous soumet à une simulation.", "Chaque membre de l'équipe reçoit des informations que les autres n'ont pas. Parlez-vous : c'est la seule façon de réussir.", "Votre téléphone est votre carnet de terrain. Ne le montrez pas, racontez-le."],
+      objectives: ["Traverser la salle piégée", "Résoudre l'énigme des couleurs", "Revenir au point de départ"],
+      known: ["Simulation sans danger réel", "Durée : environ 10 minutes"],
+      risks: ["Aucun : les blessures sont fictives"],
+      secret: { chef: "Instructeur : « Votre rôle est de faire parler tout le monde avant chaque vote. En cas d'égalité, c'est votre vote qui tranche. »" }
+    },
+    start: { energie: 60, temps: 6, menace: 0, donnees: 0 },
+    startScene: "s1",
+    scenes: {
+      s1: {
+        title: "Deux portes", env: "base",
+        text: ["La salle d'entraînement est plongée dans la pénombre. Deux portes blindées vous font face : une marquée A, l'autre B.", "Une voix dans les haut-parleurs : « Une seule porte est sûre. Chacun d'entre vous sait quelque chose. Mettez vos informations en commun, puis votez sur vos téléphones. »"],
+        secrets: {
+          sci: "Votre détecteur indique que la porte A est alimentée normalement.",
+          guer: "Vous voyez des fils dénudés sous la porte B : elle est piégée.",
+          arch: "Sur la porte A, un symbole d'entraînement signifie « passage ».",
+          chef: "L'instructeur vous a glissé : « Écoutez vos spécialistes avant de voter. »"
+        },
+        scan: "La porte B est reliée à une décharge électrique d'entraînement.",
+        memory: "Dans les manuels, le symbole gravé sur la porte A signifie toujours « passage sûr ».",
+        choices: [
+          { id: "a", label: "Ouvrir la porte A", desc: "Celle qui semble alimentée.", outcome: { text: "La porte A s'ouvre en douceur. Bien joué : vous avez mis vos informations en commun.", effects: { donnees: 10 }, flags: ["bonne_porte"] }, next: "s2" },
+          { id: "b", label: "Ouvrir la porte B", desc: "Celle de droite.", danger: true, outcome: { text: "Une décharge d'entraînement vous secoue. Leçon : écoutez le guerrier et le scientifique avant de voter.", effects: { integrite: -10 } }, next: "s2" },
+          { id: "c", label: "Forcer le mur entre les deux", desc: "Tenter sa chance. Résultat incertain.", check: { role: "guer", chance: 0.5 }, success: { text: "Le panneau cède : passage ouvert. Audacieux !", effects: { temps: -1 } }, fail: { text: "Le mur tient bon et vous perdez du temps.", effects: { temps: -2, integrite: -5 } }, next: "s2" }
+        ]
+      },
+      s2: {
+        title: "L'énigme des couleurs", env: "base",
+        text: ["Un pupitre affiche quatre boutons de couleur. Une inscription : « Trois couleurs, dans le bon ordre, ouvrent la sortie. »", "Seul l'archéologue peut saisir la combinaison sur son téléphone. Les autres ont des indices : dites-les-lui !"],
+        puzzle: {
+          type: "sequence", solver: "arch", attempts: 3,
+          prompt: "Appuyez sur trois couleurs dans le bon ordre.",
+          display: "🔴  🔵  🟢  🟡",
+          options: [{ id: "rouge", label: "Rouge", icon: "🔴" }, { id: "bleu", label: "Bleu", icon: "🔵" }, { id: "vert", label: "Vert", icon: "🟢" }, { id: "jaune", label: "Jaune", icon: "🟡" }],
+          answer: ["rouge", "bleu", "vert"],
+          clues: { sci: "Le circuit du bouton vert se ferme en dernier.", guer: "Le bouton jaune est débranché : il ne sert à rien.", chef: "Fiche de l'instructeur : « le rouge passe avant le bleu ». ", arch: "Vous seul pouvez saisir la combinaison. Écoutez les autres." },
+          hint: "Rouge avant bleu, vert en dernier, jaune inutile.",
+          scan: "Le bouton jaune n'est relié à rien.",
+          failAttempt: { effects: { temps: -1 } },
+          success: { text: "La porte de sortie se déverrouille. L'énigme est résolue grâce aux indices de chacun.", effects: { donnees: 20 }, flags: ["enigme"] , next: "s3" },
+          fail: { text: "L'instructeur ouvre la porte manuellement : « Une prochaine fois, partagez vos indices plus vite. »", effects: { integrite: -5 }, next: "s3" }
+        }
+      },
+      s3: {
+        title: "Retour au point de départ", env: "base",
+        text: ["Dernière épreuve : une alarme simulée retentit. Vous devez revenir à la Porte.", "Pendant les votes, vos téléphones proposent vos pouvoirs de rôle : essayez-les. Le chef d'équipe peut imposer son choix avec son ORDRE DE MISSION."],
+        secrets: { guer: "Le couloir de gauche est encombré de caisses : lent mais sûr.", sci: "Le couloir de droite traverse une zone d'alarme : rapide mais bruyant.", arch: "Les plans de la base montrent un troisième passage par les escaliers.", chef: "Le commandement préfère un retour sûr à un retour rapide." },
+        choices: [
+          { id: "gauche", label: "Couloir de gauche", desc: "Lent mais sûr.", outcome: { text: "Vous contournez les caisses et rejoignez la Porte sans incident.", effects: { temps: -1 }, flags: ["retour_sur"] }, next: "END" },
+          { id: "droite", label: "Couloir de droite", desc: "Rapide mais bruyant.", check: { role: "sci", chance: 0.5 }, success: { text: "Le scientifique neutralise l'alarme au passage. Retour express !", flags: ["retour_sur"] }, fail: { text: "L'alarme d'entraînement vous asperge de peinture. Vous êtes « touchés ».", effects: { integrite: -20 } }, next: "END" },
+          { id: "esc", label: "Les escaliers", desc: "Le passage indiqué sur les plans.", outcome: { text: "Les escaliers vous ramènent au niveau de la Porte. Belle lecture des plans.", flags: ["retour_sur"], effects: { donnees: 10 } }, next: "END" }
+        ]
+      }
+    },
+    events: [],
+    endings: [
+      { type: "critique", dead: true, title: "Simulation interrompue", text: "L'instructeur arrête l'exercice : l'équipe a été « mise hors de combat ». Recommencez quand vous voulez." },
+      { type: "exceptionnelle", cond: { flags: ["bonne_porte", "enigme", "retour_sur"], min: { integrite: 95 } }, title: "Équipe prête", text: "Sans une égratignure, toutes les épreuves réussies. L'instructeur signe votre autorisation de mission avec un sourire." },
+      { type: "parfaite", cond: { flags: ["enigme", "retour_sur"] }, title: "Simulation réussie", text: "Vous avez compris l'essentiel : chacun voit une partie de la vérité. Les vraies missions vous attendent." },
+      { type: "partielle", cond: { any: [{ flags: ["enigme"] }, { flags: ["retour_sur"] }] }, title: "Presque prêts", text: "Quelques accrocs, mais l'équipe progresse. Le commandement vous autorise à partir… sous surveillance." },
+      { type: "controle", title: "À retravailler", text: "La simulation est terminée. Prenez le temps de partager vos informations avant de voter." }
+    ],
+    secondaries: [{ text: "Choisir la bonne porte", cond: { flags: ["bonne_porte"] } }, { text: "Résoudre l'énigme des couleurs", cond: { flags: ["enigme"] } }],
+    codex: []
+  };
+
+  /* =====================================================================================
+     MISSION 1 — P3X-741 « LE TEMPLE OUBLIÉ »
+     ===================================================================================== */
+  M.m1 = {
+    id: "m1", code: "P3X-741", name: "Le Temple oublié", sub: "Jungle · ruines itzaques · 35 à 50 min", env: "jungle",
+    duration: "35–50 min", difficultyLabel: "Accessible",
+    itemNames: { cristal: "Cristal de commande" },
+    briefing: {
+      time: "Briefing — 06 h 40, salle de commandement",
+      lines: ["Une sonde a filmé sur P3X-741 un temple envahi par la jungle, bâti par un peuple disparu : les Itzaques.", "Au cœur du temple, un cristal émet une énergie stable et inconnue. Le commandement veut le récupérer pour l'étudier.", "La sonde a aussi enregistré des silhouettes armées près des ruines. Prudence."],
+      objectives: ["Récupérer le cristal de commande", "Comprendre la fonction du temple", "Revenir avec toute l'équipe"],
+      known: ["Climat tropical, jungle dense", "Ruines itzaques, peuple disparu depuis des siècles", "Présence armée possible"],
+      risks: ["Pièges anciens", "Patrouilles jaffa", "Énergie inconnue au cœur du temple"],
+      secret: {
+        chef: "Ordre confidentiel : le cristal est la priorité absolue… mais le général vous a dit à voix basse : « Si quelque chose ne colle pas, je préfère une équipe vivante à un caillou. »",
+        sci: "Les relevés de la sonde montrent deux sources d'énergie liées entre elles, l'une à l'est du temple, l'autre à l'ouest. Le commandement n'en a vu qu'une.",
+        arch: "Les rares textes itzaques connus parlent d'une « Reine sous la pierre » que le peuple aurait endormie pour toujours.",
+        guer: "Les silhouettes de la sonde portent des armures de Jaffa. Ils ne pillent pas : ils sont en position de garde."
+      }
+    },
+    start: { energie: 60, temps: 8, menace: 1, donnees: 0 },
+    startScene: "arrivee", timeoutScene: "nuit", threatScene: "patrouille", threatAt: 4,
+    scenes: {
+      arrivee: {
+        title: "Terrasse de la Porte", env: "jungle",
+        text: ["Le vortex se referme derrière vous. La Porte se dresse sur une terrasse de pierre fissurée, avalée par les racines. L'air est lourd, saturé de cris d'oiseaux.", "Au loin, au-dessus de la canopée, le sommet d'un temple à degrés. En contrebas, les toits effondrés d'un village. Sur la mousse, des traces fraîches."],
+        radio: "Base, ici l'équipe. Arrivée confirmée sur P3X-741. Début de la reconnaissance.",
+        secrets: {
+          chef: "Rappel du commandement : le cristal est au cœur du temple. Le temps joue contre vous.",
+          sci: "Votre détecteur capte une pulsation régulière sous le temple, comme un appareil en veille depuis des siècles.",
+          arch: "Les glyphes de la terrasse sont itzaques. L'un d'eux revient sans cesse : un serpent couronné, barré d'un trait. « Interdit ».",
+          guer: "Traces de bottes lourdes, au moins quatre hommes, direction le temple. Passés il y a moins d'un jour. Des fumées montent à l'ouest : un campement."
+        },
+        scan: "Deux sources d'énergie sous le temple pulsent au même rythme : quand l'une faiblit, l'autre aussi.",
+        memory: "Les villages itzaques gardaient toujours un « veilleur » chargé de surveiller le temple. Ses descendants vivent peut-être encore dans la région.",
+        recon: "Le campement fumant à l'ouest est sur le chemin du temple.",
+        choices: [
+          { id: "temple", label: "Marcher droit vers le temple", desc: "Le chemin le plus rapide.", outcome: { text: "Vous taillez votre route à la machette. Le temple se rapproche, imposant et silencieux.", effects: { temps: -1 } }, next: "parvis" },
+          { id: "traces", label: "Suivre les traces de bottes", desc: "Découvrir qui rôde ici.", check: { role: "guer", chance: 0.55 }, success: { text: "Vous suivez la piste sans un bruit jusqu'à un campement jaffa, à l'abri des fougères.", effects: { temps: -1 }, flags: ["discret"] }, fail: { text: "Une branche craque. Des voix s'élèvent : vous êtes repérés, mais parvenez à vous cacher près de leur campement.", effects: { temps: -1, integrite: -10, menace: 1 } }, next: "campement" },
+          { id: "village", label: "Descendre au village abandonné", desc: "Fouiller les ruines habitées.", outcome: { text: "Vous descendez parmi les maisons effondrées. Une silhouette se faufile entre les murs : vous n'êtes pas seuls.", effects: { temps: -1 } }, next: "village" }
+        ]
+      },
+      village: {
+        title: "Le village du veilleur", env: "village",
+        text: ["Un jeune chasseur au visage peint vous observe depuis un toit, arc tendu. Il s'appelle Ilyan. Il prononce quelques mots dans une langue chantante et pointe le temple, l'air grave.", "Il ne tire pas. Il attend de voir ce que vous allez faire."],
+        secrets: {
+          arch: "Vous reconnaissez un dialecte dérivé de l'itzaque. Il répète : « Ne réveillez pas la Reine. Le cristal chante pour qu'elle dorme. »",
+          guer: "Son arc est prêt, mais ses pieds sont tournés vers la fuite. Il a plus peur que vous.",
+          sci: "Il porte au cou un éclat de cristal qui vibre faiblement, au même rythme que la source du temple.",
+          chef: "Un allié sur place changerait tout. Mais le commandement n'a autorisé aucun contact."
+        },
+        memory: "Chez les Itzaques, offrir de l'eau était le premier signe de paix. Parler leur langue, le second.",
+        recon: "Il connaît la jungle mieux que quiconque : il pourrait vous montrer un chemin discret.",
+        choices: [
+          { id: "parler", label: "Lui parler dans sa langue", desc: "L'archéologue tente le contact.", req: { role: "arch" }, check: { role: "arch", chance: 0.65 }, success: { text: "Ilyan baisse son arc. Il est le dernier veilleur de son peuple. Il vous apprend que le cristal maintient la Reine endormie et promet de vous guider jusqu'à la Porte au retour.", flags: ["ilyan", "verite_partielle"], effects: { donnees: 10 } }, fail: { text: "Un mot de travers : Ilyan recule, méfiant. Il vous laisse passer mais disparaît dans la jungle.", effects: { temps: -1 } }, next: "parvis" },
+          { id: "eau", label: "Lui offrir de l'eau et des vivres", desc: "Un geste de paix universel.", cost: { integrite: -5 }, outcome: { text: "Ilyan accepte, surpris. Il ne parle pas votre langue, mais il dessine dans la poussière : un serpent endormi sous un cristal. Puis il vous fait signe de le suivre quand vous repartirez.", flags: ["ilyan"] }, next: "parvis" },
+          { id: "ignorer", label: "L'ignorer et repartir", desc: "Pas de contact, pas de risque.", outcome: { text: "Vous reprenez la route du temple. Ilyan vous suit des yeux longtemps.", effects: { temps: -1 } }, next: "parvis" }
+        ]
+      },
+      campement: {
+        title: "Le campement jaffa", env: "jungle",
+        text: ["Quatre guerriers jaffa montent la garde autour d'un feu, armes à portée de main. Ils ne fouillent rien, ne pillent rien : ils regardent le temple, comme s'ils attendaient.", "L'un d'eux nettoie un bâton de combat orné d'un serpent couronné."],
+        secrets: {
+          guer: "Un seul guetteur, les trois autres somnolent. Une attaque surprise est possible, mais risquée.",
+          arch: "Le serpent couronné est l'emblème de la Reine sous la pierre. Ces Jaffa la servent encore.",
+          sci: "Leur radio émet en direction du temple, à intervalles réguliers. Ils surveillent la pulsation.",
+          chef: "Un affrontement attirera l'attention. Le commandement préfère la discrétion."
+        },
+        scan: "Les Jaffa ne captent que la source est. Ils ignorent celle de l'ouest.",
+        recon: "Attaquer : dangereux. Les contourner : sûr mais lent.",
+        choices: [
+          { id: "attaque", label: "Attaque surprise", desc: "Neutraliser les gardes.", danger: true, check: { role: "guer", chance: 0.5 }, success: { text: "En quelques secondes, les Jaffa sont désarmés et ligotés. Vous apprenez qu'ils attendent « le réveil de leur Reine ». La route du retour sera libre.", flags: ["jaffa_neutralises", "ecoute"], effects: { menace: -1 } }, fail: { text: "Le guetteur donne l'alerte. Échange de tirs, vous décrochez dans la jungle, blessés.", effects: { integrite: -20, menace: 2 } }, next: "parvis" },
+          { id: "ecouter", label: "Les espionner en silence", desc: "Apprendre ce qu'ils attendent.", check: { role: "guer", chance: 0.65, flag: "discret", flagBonus: 0.15 }, success: { text: "Vous saisissez leur conversation : « Dès que le cristal sera ôté, la Reine s'éveillera. Nous n'avons qu'à attendre que quelqu'un le prenne. »", flags: ["ecoute"], effects: { donnees: 10, temps: -1 } }, fail: { text: "Vous n'entendez que des bribes avant de devoir reculer.", effects: { temps: -1, menace: 1 } }, next: "parvis" },
+          { id: "contourner", label: "Les contourner", desc: "Rejoindre le temple sans risque.", outcome: { text: "Vous faites un large détour par la rivière. Les Jaffa ne vous ont pas vus.", effects: { temps: -1 } }, next: "parvis" }
+        ]
+      },
+      parvis: {
+        title: "Les trois gardiens", env: "temple",
+        text: ["Le parvis du temple est gardé par cinq statues : un Soleil, une Lune, un Faucon, un Jaguar et un Serpent. Sous chacune, une plaque de pierre.", "La grande porte est scellée. Une inscription court sur le linteau. L'archéologue est le seul à pouvoir lire et actionner le mécanisme : guidez-le."],
+        puzzle: {
+          type: "sequence", solver: "arch", attempts: 3,
+          prompt: "Appuyez sur les plaques des gardiens dans le bon ordre.",
+          display: "☀️ SOLEIL   🌙 LUNE   🦅 FAUCON   🐆 JAGUAR   🐍 SERPENT",
+          options: [{ id: "soleil", label: "Soleil", icon: "☀️" }, { id: "lune", label: "Lune", icon: "🌙" }, { id: "faucon", label: "Faucon", icon: "🦅" }, { id: "jaguar", label: "Jaguar", icon: "🐆" }, { id: "serpent", label: "Serpent", icon: "🐍" }],
+          answer: ["soleil", "faucon", "serpent"],
+          clues: {
+            arch: "L'inscription dit : « Trois gardiens ouvrent la porte. Le Soleil se lève avant que le Faucon ne prenne son vol. »",
+            sci: "Les plaques sont reliées par un circuit : celle du Serpent ferme le circuit. Elle doit être pressée en dernier.",
+            guer: "La plaque du Jaguar est usée et entourée de trous dans le mur : elle déclenche un piège. N'y touchez pas.",
+            chef: "Rapport d'une ancienne expédition : « Sur ces mécanismes, seuls le soleil et les animaux comptent. La lune n'est qu'un leurre. »"
+          },
+          hint: "Les Itzaques racontaient l'aube ainsi : le soleil, puis l'oiseau, puis le serpent qui rentre sous terre.",
+          scan: "Seules trois plaques sont reliées au mécanisme d'ouverture. La plaque du Jaguar est reliée à autre chose : un piège.",
+          failAttempt: { effects: { integrite: -8 } },
+          success: { text: "Les plaques s'enfoncent l'une après l'autre. Dans un grondement, la grande porte pivote. Une odeur de pierre et d'encens ancien vous enveloppe.", effects: { donnees: 10 }, next: "fresques" },
+          fail: { text: "Des fléchettes jaillissent des murs. Vous finissez par passer par une brèche effondrée, à quatre pattes et blessés.", effects: { integrite: -15, temps: -2 }, next: "fresques" }
+        }
+      },
+      fresques: {
+        title: "La galerie des fresques", env: "temple",
+        text: ["Une longue galerie peinte s'enfonce dans le temple. Les fresques racontent une histoire : un être venu du ciel, une couronne de serpent, un peuple à genoux… puis une révolte.", "Au bout de la galerie, le couloir se sépare en deux : l'aile est, où brille une lueur bleue, et l'aile ouest, plongée dans le noir."],
+        secrets: {
+          arch: [
+            { if: { flags: ["verite_partielle"] }, text: "Ilyan avait raison : la fresque montre le peuple enfermant la Reine dans un sarcophage, à l'ouest, et plaçant le cristal à l'est « pour qu'il chante et qu'elle dorme ». Retirer le cristal la réveillerait." },
+            { text: "La fresque montre le peuple enfermant la Reine dans un sarcophage, puis plaçant un cristal « qui chante pour qu'elle dorme ». Il faudrait l'étudier de plus près pour comprendre où est quoi." }
+          ],
+          sci: "La source est (le cristal) envoie son énergie vers la source ouest. C'est un émetteur, et l'ouest est le récepteur.",
+          guer: "Des traces jaffa s'arrêtent net à l'entrée de la galerie. Ils n'osent pas entrer : ils attendent que quelqu'un d'autre le fasse.",
+          chef: "Le commandement veut le cristal. Mais vous commencez à vous demander pourquoi les Jaffa vous laissent faire."
+        },
+        memory: "Les Itzaques cachaient toujours la conclusion de leurs récits dans le dernier panneau, en bas à droite.",
+        scan: "Le cristal de l'aile est alimente quelque chose à l'ouest : un système de stase, en veille depuis des siècles.",
+        choices: [
+          { id: "etudier", label: "Étudier la fresque en détail", desc: "Prend du temps, apporte des réponses.", outcome: { text: "Le dernier panneau est sans équivoque : le cristal maintient la Reine en sommeil dans son sarcophage. Le prendre sans précaution la réveillerait.", effects: { temps: -1, donnees: 20 }, flags: ["verite"], log: { kind: "decouverte", text: "La fresque révèle le rôle du cristal" } }, next: "carrefour" },
+          { id: "avancer", label: "Photographier et avancer", desc: "Gagner du temps.", outcome: { text: "Quelques photos pour la base, puis vous avancez jusqu'à la croisée des couloirs.", effects: { donnees: 5 } }, next: "carrefour" }
+        ]
+      },
+      carrefour: {
+        title: "La croisée des ailes", env: "temple",
+        text: ["Deux couloirs. À l'est, une lueur bleue et un chant cristallin à peine audible. À l'ouest, l'obscurité et un bourdonnement sourd, régulier, comme une respiration.", "Où l'équipe va-t-elle ?"],
+        secrets: {
+          sci: [{ if: { flags: ["reveil"] }, text: "ALERTE : le bourdonnement à l'ouest s'accélère. Le système de stase se dégrade." }, { text: "Le bourdonnement de l'ouest est parfaitement stable. Tant que le cristal est en place." }],
+          guer: [{ if: { flags: ["reveil"] }, text: "Des pas lourds dans l'aile ouest. Quelque chose bouge." }, { text: "Rien ne bouge. Pour l'instant." }],
+          arch: "Le seuil de l'aile ouest porte le serpent couronné barré : « Interdit ».",
+          chef: "Votre ordre : le cristal, à l'est. Mais rien ne vous interdit de sécuriser l'ouest d'abord."
+        },
+        recon: "L'aile ouest est le danger principal. L'aile est est piégée mais connue.",
+        choices: [
+          { id: "est", label: "Aile est : le cristal", desc: "L'objectif de la mission.", once: true, next: "aile_est" },
+          { id: "ouest", label: "Aile ouest : la respiration", desc: "Ce que garde le temple.", once: true, next: "aile_ouest" },
+          { id: "sortir", label: "Quitter le temple", desc: "Retourner vers la Porte.", outcome: [{ if: { flags: ["reveil"], notFlags: ["scelle", "detruit"] }, text: "Vous faites demi-tour… mais un fracas de pierre retentit derrière vous. La Reine est éveillée, et elle vous barre la route.", next: "confrontation" }, { text: "Vous ressortez du temple, ébloui par la lumière de la jungle." }], next: "retour" }
+        ]
+      },
+      aile_est: {
+        title: "Le cristal qui chante", env: "temple",
+        text: ["Au centre d'une salle ronde, le cristal flotte au-dessus d'un socle cerclé de lames. Il chante, une note pure qui fait vibrer vos dents.", "Sur le socle, quatre nombres gravés en écriture itzaque, suivis d'un cadran à deux molettes. Le scientifique est le seul à pouvoir manipuler le cadran sans se blesser."],
+        enter: [{ if: { notFlags: ["scelle", "detruit"] }, text: "", log: { kind: "note", text: "Le socle du cristal est atteint" } }],
+        puzzle: {
+          type: "code", solver: "sci", attempts: 3,
+          prompt: "Entrez la valeur suivante de la suite (en chiffres).",
+          display: "•••    —•    ——••    ☉••••    ?",
+          answer: "48",
+          clues: {
+            arch: "Notation itzaque : un point (•) vaut 1, une barre (—) vaut 5, un soleil (☉) vaut 20. On additionne tous les signes d'un nombre.",
+            sci: "La suite gravée suit une loi simple : chaque nombre est le double du précédent. Le cadran attend le nombre suivant.",
+            chef: "Le cadran a deux molettes : la réponse a exactement deux chiffres.",
+            guer: "Les lames du socle sortent un peu plus à chaque erreur. Pas plus de deux erreurs."
+          },
+          hint: "Lisez d'abord les quatre nombres avec la notation itzaque (3, 6, 12, 24), puis doublez.",
+          scan: "Le mécanisme compare la saisie à un nombre en mémoire : 2 chiffres. Les quatre valeurs gravées valent 3, 6, 12 et 24.",
+          failAttempt: { effects: { integrite: -8 } },
+          success: [
+            { if: { flags: ["scelle"] }, text: "Le cadran s'enclenche, les lames se rétractent. Le cristal se pose dans votre main, tiède. À l'ouest, le scellement renforcé tient : le bourdonnement ne change pas.", items: ["cristal"], flags: ["objectif"], effects: { donnees: 20 }, log: { kind: "objectif", text: "Cristal récupéré, la Reine reste endormie" } },
+            { if: { flags: ["detruit"] }, text: "Le cadran s'enclenche. Le cristal se pose dans votre main : il ne chante plus pour personne, le sarcophage n'existe plus.", items: ["cristal"], flags: ["objectif"], effects: { donnees: 15 }, log: { kind: "objectif", text: "Cristal récupéré" } },
+            { text: "Le cadran s'enclenche, les lames se rétractent. Le cristal se pose dans votre main… et se tait. Dans le silence, à l'ouest, le bourdonnement s'emballe. Quelque chose s'éveille.", items: ["cristal"], flags: ["objectif", "reveil"], effects: { donnees: 20, menace: 1 }, log: { kind: "objectif", text: "Cristal récupéré… la Reine s'éveille" } }
+          ],
+          fail: [
+            { if: { any: [{ flags: ["scelle"] }, { flags: ["detruit"] }] }, text: "Les lames jaillissent. Vous arrachez le cristal de force, la main en sang. Il se fêle mais vous l'avez.", items: ["cristal"], flags: ["objectif", "fele"], effects: { integrite: -15 } },
+            { text: "Les lames jaillissent. Vous arrachez le cristal de force. Il se fêle… et le chant s'éteint. À l'ouest, un grondement.", items: ["cristal"], flags: ["objectif", "fele", "reveil"], effects: { integrite: -15, menace: 1 } }
+          ]
+        },
+        next: "carrefour"
+      },
+      aile_ouest: {
+        title: "Le sarcophage", env: "temple",
+        text: ["Une crypte basse. Au centre, un sarcophage d'or et de pierre noire, gravé du serpent couronné. Des tubes de cristal le relient au plafond. Il respire, lentement.", "À l'intérieur dort la Reine sous la pierre. Le sort du temple se joue ici."],
+        secrets: {
+          sci: [{ if: { flags: ["reveil"] }, text: "La stase est en train de lâcher. Il reste peu de temps : un renfort énergétique peut encore la stabiliser." }, { text: "Avec 30 unités d'énergie, vous pourriez renforcer le scellement et rendre le sarcophage indépendant du cristal." }],
+          guer: "Une charge explosive bien placée détruirait le sarcophage. Le bruit attirera les Jaffa.",
+          arch: "Une Reine goa'uld vit dans un hôte humain. Détruire le sarcophage, c'est aussi tuer cette personne, prisonnière depuis des siècles.",
+          chef: "Le commandement n'a rien prévu pour ça. C'est votre décision."
+        },
+        scan: [{ if: { flags: ["reveil"] }, text: "Signes vitaux en hausse rapide à l'intérieur du sarcophage." }, { text: "Signes vitaux très faibles, stase stable. Le système dépend entièrement du cristal de l'aile est." }],
+        memory: "Les révoltés itzaques n'ont pas tué la Reine : ils ne le pouvaient pas sans tuer l'hôte. Ils ont choisi de l'endormir.",
+        recon: "Ouvrir le sarcophage : extrêmement dangereux.",
+        choices: [
+          { id: "renforcer", label: "Renforcer le scellement", desc: "Le scientifique y consacre 30 d'énergie.", req: { role: "sci" }, cost: { energie: -30 }, check: { role: "sci", chance: 0.6, item: "eq_generateur", itemBonus: 0.15 }, success: { text: "Les tubes s'illuminent puis se stabilisent. Le sarcophage n'a plus besoin du cristal : la Reine dormira pour toujours.", flags: ["scelle"], unflags: ["reveil"], effects: { donnees: 10 }, log: { kind: "decision", text: "Le sarcophage est scellé définitivement" } }, fail: { text: "Une surcharge fait sauter un tube. L'énergie est perdue et le bourdonnement s'accélère.", effects: { menace: 1 } } },
+          { id: "detruire", label: "Détruire le sarcophage", desc: "Une charge explosive. Définitif.", danger: true, req: { role: "guer" }, check: { role: "guer", chance: 0.6 }, success: { text: "L'explosion fait trembler tout le temple. Le sarcophage n'est plus qu'un tas de gravats. La menace a disparu, avec l'hôte prisonnier.", flags: ["detruit"], unflags: ["reveil"], effects: { menace: 1, donnees: -5 }, log: { kind: "decision", text: "Le sarcophage est détruit" } }, fail: { text: "La charge souffle la moitié de la crypte. Blessés, vous entendez le couvercle du sarcophage glisser…", flags: ["reveil"], effects: { integrite: -20, menace: 1 } } },
+          { id: "ouvrir", label: "Ouvrir le sarcophage", desc: "Voir ce qu'il contient.", danger: true, outcome: { text: "Le couvercle glisse. Deux yeux s'ouvrent et s'illuminent d'un éclat doré. Une voix double résonne : « Enfin. »", flags: ["reveil", "ouvert"], effects: { menace: 2 }, next: "confrontation" } },
+          { id: "rien", label: "Ne rien toucher", desc: "Repartir sans intervenir.", outcome: { text: "Vous reculez sans bruit. Le sarcophage continue de respirer dans le noir." } }
+        ],
+        next: "carrefour"
+      },
+      confrontation: {
+        title: "La Reine sous la pierre", env: "temple",
+        text: ["Une femme vêtue d'or se dresse dans la lumière, entourée de Jaffa accourus du dehors. Ses yeux brillent. « Vous m'avez libérée. Agenouillez-vous, et vous servirez. »", "Il faut agir, vite."],
+        secrets: {
+          guer: "Ses Jaffa sont deux, mal réveillés. La Reine porte un bouclier personnel au poignet : il faut frapper ailleurs.",
+          arch: [{ if: { items: ["cristal"] }, text: "Le cristal ! Si on le rapproche d'elle en chantant la note itzaque, il peut la replonger dans le sommeil. Mais vous devrez le laisser ici." }, { text: "Sans le cristal, impossible de la rendormir." }],
+          sci: "Son bouclier se recharge en quelques secondes après chaque impact.",
+          chef: "Votre équipe d'abord. Une retraite n'est pas une défaite."
+        },
+        recon: "Combattre est très risqué. La fuite coûtera du sang.",
+        choices: [
+          { id: "combattre", label: "Combattre", desc: "Neutraliser la Reine et ses gardes.", danger: true, check: { role: "guer", chance: 0.45 }, success: { text: "Un tir précis désactive son bouclier, un second l'abat. Les Jaffa, sans maîtresse, déposent les armes.", flags: ["reine_vaincue"], effects: { integrite: -10 }, log: { kind: "decision", text: "La Reine est vaincue" } }, fail: { text: "Son bouclier encaisse tout. Une onde de choc vous projette contre les murs. Vous parvenez à fuir… elle aussi.", flags: ["reine_fuite"], effects: { integrite: -30 } }, next: "retour" },
+          { id: "rendormir", label: "La rendormir avec le cristal", desc: "L'archéologue chante la note itzaque.", req: { items: ["cristal"], role: "arch" }, check: { role: "arch", chance: 0.6 }, success: { text: "Le cristal chante, la Reine vacille et s'effondre dans son sarcophage, endormie. Vous le scellez, et laissez le cristal là où il doit être.", flags: ["rendormie", "scelle"], unflags: ["objectif", "reveil"], loseItems: ["cristal"], effects: { donnees: 15 }, log: { kind: "decision", text: "La Reine est rendormie, le cristal reste au temple" } }, fail: { text: "La note se brise. La Reine arrache le cristal et vous repousse d'une onde de choc.", flags: ["reine_fuite"], loseItems: ["cristal"], unflags: ["objectif"], effects: { integrite: -20 } }, next: "retour" },
+          { id: "fuir", label: "Fuir vers la Porte", desc: "Sauver l'équipe.", outcome: { text: "Vous courez sous les tirs jusqu'à la jungle. Derrière vous, un rire glacé.", flags: ["reine_fuite"], effects: { integrite: -10, temps: -1 } }, next: "retour" }
+        ]
+      },
+      retour: {
+        title: "Retour à la Porte", env: "jungle",
+        text: [
+          "Vous retrouvez la terrasse de la Porte. Le chemin semble libre… mais rien n'est jamais simple sur P3X-741.",
+          "Il faut composer l'adresse de la Terre et franchir le vortex."
+        ],
+        secrets: {
+          guer: [{ if: { flags: ["jaffa_neutralises"] }, text: "Les Jaffa du campement sont toujours ligotés. Personne ne garde la Porte." }, { text: "Deux Jaffa gardent le terminal de composition. Il faudra les éloigner ou passer en force." }],
+          sci: "Le générateur peut créer une diversion sonore à l'autre bout de la terrasse (20 d'énergie).",
+          arch: [{ if: { flags: ["ilyan"] }, text: "Ilyan est là, caché dans les racines. Il vous fait signe : il connaît un sentier qui mène au terminal par-derrière." }, { text: "Les glyphes du terminal sont simples : vous pouvez composer très vite." }],
+          chef: "Faites rentrer tout le monde. Le reste peut attendre le rapport."
+        },
+        choices: [
+          { id: "force", label: "Composer sous le feu", desc: "Passer en force.", req: { notFlags: ["jaffa_neutralises"] }, check: { role: "guer", chance: 0.6 }, success: { text: "Tirs de couverture, composition éclair, plongeon dans le vortex. Tout le monde est passé." }, fail: { text: "Vous passez le vortex sous un déluge de tirs. Tout le monde est rentré, mais pas sans blessures.", effects: { integrite: -15 } }, next: "END" },
+          { id: "diversion", label: "Créer une diversion", desc: "Le générateur attire les gardes.", req: { notFlags: ["jaffa_neutralises"] }, cost: { energie: -20 }, outcome: { text: "Le vacarme attire les gardes à l'autre bout de la terrasse. Vous composez l'adresse en silence." }, next: "END" },
+          { id: "sentier", label: "Suivre le sentier d'Ilyan", desc: "Le chemin secret du veilleur.", req: { flags: ["ilyan"], notFlags: ["jaffa_neutralises"] }, outcome: { text: "Ilyan vous mène jusqu'au terminal par un passage invisible. Avant que vous ne partiez, il pose la main sur son cœur : « Merci, voyageurs. »", flags: ["ilyan_adieu"] }, next: "END" },
+          { id: "libre", label: "Composer l'adresse", desc: "Personne ne garde la Porte.", req: { flags: ["jaffa_neutralises"] }, outcome: [{ if: { flags: ["ilyan"] }, text: "La Porte s'ouvre sans encombre. Ilyan vous salue depuis la lisière de la jungle.", flags: ["ilyan_adieu"] }, { text: "La Porte s'ouvre sans encombre. Vous plongez dans le vortex." }], next: "END" }
+        ]
+      },
+      nuit: {
+        title: "La nuit tombe", env: "jungle", noThreat: true,
+        text: ["Le soleil disparaît d'un coup derrière la canopée. Les cris d'oiseaux laissent place à des bruits inquiétants. Le commandement s'impatiente à la radio.", "« Équipe, votre fenêtre de retour se ferme. Rentrez. »"],
+        radio: "Équipe, ici la base. Vous avez dépassé l'horaire prévu. Répondez.",
+        secrets: { chef: "Le général : « Vous avez une heure, pas une de plus. »", guer: "La jungle de nuit, c'est leur terrain, pas le vôtre.", sci: "Vos batteries de lampes ne tiendront pas toute la nuit.", arch: "Les Itzaques n'entraient jamais dans le temple après le coucher du soleil." },
+        choices: [
+          { id: "rentrer", label: "Rentrer immédiatement", desc: "Mettre fin à la mission.", outcome: { text: "Vous rebroussez chemin vers la Porte, lampes éteintes." }, next: "retour" },
+          { id: "continuer", label: "Continuer malgré tout", desc: "Une dernière tentative, à vos risques.", outcome: { text: "Vous poursuivez dans l'obscurité. Chaque ombre devient une menace.", effects: { menace: 2, integrite: -10 } }, next: "$resume" }
+        ]
+      },
+      patrouille: {
+        title: "Patrouille jaffa", env: "jungle", noThreat: true,
+        text: ["Des torches entre les arbres. Une patrouille jaffa a repéré votre passage et ratisse la zone. Ils seront sur vous dans une minute."],
+        secrets: { guer: "Six gardes, en ligne. Il y a un ravin sur votre gauche, idéal pour se cacher.", sci: "Leurs détecteurs repèrent les appareils allumés : éteignez tout.", arch: "Ils chantent une prière à la Reine : ils sont nerveux, pas méthodiques.", chef: "Personne ne tire sans votre ordre." },
+        choices: [
+          { id: "cacher", label: "Se cacher dans le ravin", desc: "Tout éteindre et attendre.", check: { role: "guer", chance: 0.65 }, success: { text: "La patrouille passe à deux mètres de vous sans vous voir.", effects: { menace: -2, temps: -1 } }, fail: { text: "Un garde glisse dans le ravin et vous découvre. Vous devez vous battre pour fuir.", effects: { integrite: -15, menace: -1 } }, next: "$resume" },
+          { id: "tirer", label: "Ouvrir le feu les premiers", desc: "Frapper avant d'être frappés.", danger: true, check: { role: "guer", chance: 0.5 }, success: { text: "La patrouille se disperse dans la nuit.", effects: { menace: -1, integrite: -5 } }, fail: { text: "Le combat est rude. Vous décrochez, blessés.", effects: { integrite: -25 } }, next: "$resume" }
+        ]
+      }
+    },
+    events: [
+      { id: "orage", title: "Orage tropical", text: "Un orage d'une violence inouïe s'abat sur la jungle. Vous perdez du temps à l'abri.", effects: { temps: -1 } },
+      { id: "serpent", title: "Morsure", text: "Un serpent jaillit des feuilles et mord l'un d'entre vous. La trousse de secours fait son office.", effects: { integrite: -10 } },
+      { id: "vaisseau", title: "Vaisseau en approche", text: "Un vaisseau en forme de pyramide survole la jungle à basse altitude. On vous cherche.", effects: { menace: 1 } },
+      { id: "effondrement", title: "Effondrement", text: "Un pan de mur s'effondre derrière vous. Il faut dégager le passage avec le matériel.", effects: { energie: -10 } },
+      { id: "source", title: "Source claire", tone: "good", text: "Une source d'eau pure jaillit entre deux racines. Une pause bienvenue.", effects: { integrite: 10 } },
+      { id: "stele", title: "Stèle oubliée", tone: "good", text: "Une stèle intacte, couverte d'inscriptions : une mine d'or pour les chercheurs de la base.", effects: { donnees: 10 } }
+    ],
+    endings: [
+      { type: "critique", dead: true, title: "L'équipe ne répond plus", text: "Les blessures ont eu raison de vous. Une équipe de secours vous ramène, inconscients. La mission est un échec et le temple reste un mystère." },
+      { type: "critique", cond: { flags: ["reveil"], notFlags: ["scelle", "detruit", "reine_vaincue", "rendormie"] }, title: "La Reine est libre", text: "Vous êtes rentrés, mais derrière vous, une Reine goa'uld s'est éveillée après des siècles de sommeil. Ses Jaffa l'ont rejointe. Le commandement place P3X-741 sur la liste des mondes interdits." },
+      { type: "exceptionnelle", cond: { flags: ["objectif", "verite", "scelle", "ilyan"], notFlags: ["fele"], min: { integrite: 50 } }, title: "Le secret des Itzaques", text: "Vous rapportez le cristal intact, la Reine dort pour toujours dans un sarcophage autonome, et le dernier veilleur itzaque est devenu un allié. Les fresques réécrivent l'histoire de ce peuple : il a vaincu une Goa'uld sans verser une goutte de sang." },
+      { type: "parfaite", cond: { flags: ["objectif"], any: [{ flags: ["scelle"] }, { flags: ["detruit"] }, { flags: ["reine_vaincue"] }], min: { integrite: 40 } }, title: "Mission accomplie", text: "Le cristal est à la base, la menace du temple est neutralisée et toute l'équipe est rentrée debout. Le général vous serre la main." },
+      { type: "partielle", cond: { any: [{ flags: ["objectif"] }, { flags: ["rendormie"] }] }, title: "Mission accomplie… en partie", text: "Vous avez obtenu une partie de ce que voulait le commandement, mais pas sans prix. Le rapport soulève autant de questions qu'il n'en résout." },
+      { type: "controle", title: "Retour sans le cristal", text: "Vous rentrez sans le cristal, mais sans avoir réveillé ce qui dort dans le temple. Le commandement est déçu ; il aurait pu être bien pire." }
+    ],
+    secondaries: [
+      { text: "Gagner la confiance d'Ilyan, le dernier veilleur", cond: { flags: ["ilyan"] } },
+      { text: "Comprendre le message des fresques", cond: { flags: ["verite"] } },
+      { text: "Rapporter au moins 50 unités de données", cond: { min: { donnees: 50 } } },
+      { text: "Garder l'intégrité de l'équipe au-dessus de 60", cond: { min: { integrite: 60 } } }
+    ],
+    codex: [
+      { id: "itzaques", title: "Les Itzaques", cond: { flags: ["verite"] }, text: "Un peuple qui a renversé sa divinité goa'uld en l'endormant grâce à un cristal chantant, plutôt que de tuer l'hôte qu'elle possédait." },
+      { id: "reine", title: "La Reine sous la pierre", cond: { any: [{ flags: ["scelle"] }, { flags: ["reine_vaincue"] }, { flags: ["rendormie"] }] }, text: "Une Reine goa'uld oubliée, servie depuis des siècles par une poignée de Jaffa fidèles qui attendaient son réveil." },
+      { id: "ilyan", title: "Ilyan, le veilleur", cond: { flags: ["ilyan"] }, text: "Dernier descendant des veilleurs itzaques. Il garde le temple, seul, depuis la mort de sa famille." }
+    ]
+  };
+
+  /* =====================================================================================
+     MISSION 2 — P4X-219 « LE SIGNAL FANTÔME »
+     ===================================================================================== */
+  M.m2 = {
+    id: "m2", code: "P4X-219", name: "Le Signal fantôme", sub: "Monde glacé · enquête · 40 à 55 min", env: "ice",
+    duration: "40–55 min", difficultyLabel: "Intermédiaire",
+    itemNames: { enregistrement: "Enregistrement du signal" },
+    briefing: {
+      time: "Briefing — 22 h 10, alerte de niveau 2",
+      lines: ["Depuis trois jours, un signal radio se répète toutes les 41 secondes depuis P4X-219, un monde couvert de glace.", "Les analystes hésitent : appel de détresse, balise de piège, arme en phase de démarrage ? Personne n'en sait rien.", "Votre mission : trouver la source, comprendre le signal, et décider de la suite."],
+      objectives: ["Localiser et comprendre le signal", "Établir une hypothèse fiable", "Agir en conséquence, sans provoquer de catastrophe"],
+      known: ["Températures de −30 °C", "Un village habité à deux heures de marche", "Une tour de glace au nord, un lac gelé à l'est"],
+      risks: ["Blizzard", "Glace instable", "Origine du signal inconnue"],
+      secret: {
+        chef: "Les analystes militaires penchent pour une arme. Ils vous ont donné l'autorisation de détruire la source « si nécessaire ». À vous de juger.",
+        sci: "Le signal est structuré en groupes d'impulsions. Ce n'est pas un phénomène naturel : quelqu'un, ou quelque chose, essaie de dire un mot après l'autre.",
+        arch: "Les rares contacts avec les Vélans, le peuple du village, mentionnent « les Dormeurs du lac ». Une légende, peut-être.",
+        guer: "Les images satellites montrent un objet volant autour de la tour. Petit, rapide, armé ou non : impossible à dire."
+      }
+    },
+    start: { energie: 70, temps: 9, menace: 0, donnees: 0 },
+    startScene: "arrivee", timeoutScene: "blizzard", threatScene: "chasse", threatAt: 4,
+    scenes: {
+      arrivee: {
+        title: "Plaine blanche", env: "ice",
+        text: ["La Porte crache l'équipe dans un vent glacial. Partout, du blanc, et un ciel d'acier. Vos radios grésillent : le signal est là, régulier, toutes les 41 secondes.", "Au nord, une tour de glace translucide. À l'est, un lac gelé immense. Au sud, des fumées : le village vélan."],
+        radio: "Base, ici l'équipe. Nous captons le signal en direct. Il est très fort.",
+        secrets: {
+          sci: "Le signal est émis par la tour, mais une partie de l'énergie vient de sous le lac.",
+          guer: "Des traces de patins sur la neige : les Vélans viennent souvent jusqu'à la Porte. Pas de traces de soldats.",
+          arch: "Une borne de pierre près de la Porte porte des pictogrammes : un homme couché sous un flocon. Une tombe ? Un avertissement ?",
+          chef: "Le commandement attend un premier rapport dans deux heures."
+        },
+        scan: "Sous le lac, à plusieurs dizaines de mètres, des dizaines de petites sources de chaleur identiques, alignées.",
+        memory: "Chez les peuples des mondes glacés, un homme couché sous un flocon signifie souvent « celui qui attend » plutôt que « celui qui est mort ».",
+        choices: [
+          { id: "camp", label: "Installer le camp de base", desc: "Puis enquêter par étapes.", outcome: { text: "Vous montez un abri près de la Porte. D'ici, trois pistes s'offrent à vous.", effects: { donnees: 5 } }, next: "camp" }
+        ]
+      },
+      camp: {
+        title: "Le camp de base", env: "ice",
+        text: ["Le vent fait claquer la toile de l'abri. Chaque expédition coûte du temps : vous ne pourrez peut-être pas tout explorer.", "Quand vous en saurez assez, il faudra formuler une hypothèse sur l'origine du signal."],
+        secrets: {
+          chef: [{ if: { flags: ["signal_capte"] }, text: "Vous avez de quoi formuler une hypothèse. Mais plus vous en savez, moins vous risquez de vous tromper." }, { text: "Sans avoir étudié la tour, toute hypothèse sera un pari." }],
+          sci: [{ if: { flags: ["capsules_vues"] }, text: "Les sources de chaleur sous le lac sont des capsules de stase, j'en suis certain." }, { text: "La tour émet, le lac alimente. Il faudrait voir les deux." }],
+          arch: [{ if: { flags: ["legende"] }, text: "La légende vélane est claire : les Dormeurs se réveilleront quand « la tour chantera leur nom »." }, { text: "Le village pourrait vous apprendre ce que les Vélans savent du signal." }],
+          guer: [{ if: { flags: ["drone_detruit"] }, text: "Le drone est détruit. Mais d'autres pourraient venir." }, { text: "Restez groupés. Ce monde n'est pas aussi vide qu'il en a l'air." }]
+        },
+        choices: [
+          { id: "tour", label: "La tour de glace", desc: "La source du signal. 2 heures.", once: true, cost: { temps: -2 }, next: "tour" },
+          { id: "village", label: "Le village vélan", desc: "Les habitants du coin. 2 heures.", once: true, cost: { temps: -2 }, next: "village" },
+          { id: "lac", label: "Le lac gelé", desc: "Ce qui dort sous la glace. 2 heures.", once: true, cost: { temps: -2 }, next: "lac" },
+          { id: "hypothese", label: "Formuler une hypothèse", desc: "Décider de la nature du signal.", req: { flags: ["signal_capte"] }, showLocked: true, lockedWhy: "Étudiez d'abord la tour", next: "hypothese" },
+          { id: "rentrer", label: "Rentrer à la base", desc: "Abandonner l'enquête.", outcome: { text: "Vous repliez le camp. Le signal continue de résonner dans vos radios jusqu'à la Porte.", flags: ["abandon"] }, next: "END" }
+        ],
+        defaultChoice: "rentrer"
+      },
+      tour: {
+        title: "La tour qui chante", env: "tower",
+        text: ["La tour est une flèche de glace translucide de trente mètres. À l'intérieur, une colonne de cristal pulse au rythme du signal : 2 impulsions, 7, puis 1, puis 8. Silence. Et ça recommence.", "Une console couverte de symboles permet d'enregistrer le message. L'archéologue est le seul à pouvoir le traduire mot à mot : à vous de lui donner les clés."],
+        puzzle: {
+          type: "sequence", solver: "arch", attempts: 3,
+          prompt: "Traduisez le signal : quatre mots, dans l'ordre des impulsions.",
+          display: "▮▮   ·   ▮▮▮▮▮▮▮   ·   ▮   ·   ▮▮▮▮▮▮▮▮",
+          options: [{ id: "sous", label: "sous" }, { id: "nous", label: "nous" }, { id: "feu", label: "feu" }, { id: "ciel", label: "ciel" }, { id: "partir", label: "partir" }, { id: "attendre", label: "attendre" }, { id: "dormir", label: "dormir" }, { id: "glace", label: "glace" }, { id: "tour", label: "tour" }],
+          answer: ["nous", "dormir", "sous", "glace"],
+          clues: {
+            sci: "Les impulsions forment 4 groupes : 2, puis 7, puis 1, puis 8. Chaque groupe correspond à un mot vélan, numéroté de 1 à 9.",
+            arch: [{ if: { flags: ["lexique"] }, text: "Lexique vélan complet (offert au village) : 1 sous · 2 nous · 3 feu · 4 ciel · 5 partir · 6 attendre · 7 dormir · 8 glace · 9 tour." }, { text: "Vos notes de terrain donnent les quatre premiers mots du lexique vélan : 1 = sous, 2 = nous, 3 = feu, 4 = ciel. Les autres membres de l'équipe ont peut-être la suite." }],
+            chef: "Le commandement a transmis deux mots vélans déjà traduits : 5 = partir, 6 = attendre.",
+            guer: "Sur la porte de la tour, des encoches accompagnent des pictogrammes : 7 encoches sous un homme couché (dormir), 8 sous un flocon (glace), 9 sous une tour (tour)."
+          },
+          hint: "Le signal se lit comme une phrase vélane : sujet, verbe, puis où.",
+          scan: "Le cristal émet quatre groupes : 2, 7, 1, 8. Il ne fait que répéter, il n'attend pas de réponse.",
+          failAttempt: { effects: { temps: -1 } },
+          success: { text: "« NOUS — DORMIR — SOUS — GLACE ». Le signal n'est ni une arme ni un piège : c'est une voix qui dit « nous dormons sous la glace ». Une colonne de lumière jaillit au sommet de la tour… et quelque chose se met à bourdonner.", flags: ["signal_capte", "decode"], items: ["enregistrement"], effects: { donnees: 25 }, log: { kind: "decouverte", text: "Signal traduit : « Nous dormons sous la glace »" }, next: "drone" },
+          fail: { text: "Vous enregistrez le signal sans parvenir à le traduire. Au sommet de la tour, quelque chose se met à bourdonner.", flags: ["signal_capte"], items: ["enregistrement"], effects: { donnees: 10 }, next: "drone" }
+        }
+      },
+      drone: {
+        title: "Le gardien", env: "tower",
+        text: ["Un drone de cristal de la taille d'un ballon descend du sommet de la tour. Un faisceau lumineux balaie l'équipe, s'attarde sur vos armes. Il émet une note grave, comme une question."],
+        secrets: {
+          guer: "Il vise les armes, pas les personnes. Mais il est armé : une décharge pourrait être mortelle.",
+          sci: "Son faisceau est un scanner médical, pas une arme. Il cherche à savoir si vous êtes une menace pour quelque chose.",
+          arch: [{ if: { flags: ["decode"] }, text: "Sa note grave correspond au mot vélan « attendre ». Il garde les Dormeurs." }, { text: "La note grave ressemble à une question. Il attend une réponse." }],
+          chef: "Vos ordres autorisent la destruction des menaces. Celle-ci en est-elle une ?"
+        },
+        scan: "Le drone ne tire que sur ce qui pointe une arme vers la tour ou le lac.",
+        recon: "Le détruire est risqué. Baisser les armes est sûr, si on lui fait confiance.",
+        choices: [
+          { id: "detruire", label: "Détruire le drone", desc: "Éliminer la menace.", danger: true, check: { role: "guer", chance: 0.55 }, success: { text: "Une rafale précise : le drone éclate en mille éclats de cristal. Le bourdonnement s'arrête net.", flags: ["drone_detruit"], effects: { menace: 1 } }, fail: { text: "Le drone riposte par une décharge qui foudroie l'équipe, puis remonte se cacher dans la tour.", effects: { integrite: -25, menace: 2 } }, next: "camp" },
+          { id: "baisser", label: "Baisser les armes", desc: "Montrer qu'on ne veut pas nuire.", outcome: { text: "Vous posez vos armes dans la neige. Le drone vous scanne longuement… puis s'éloigne vers le lac, comme pour vous montrer le chemin.", flags: ["paix"], effects: { donnees: 10 } }, next: "camp" },
+          { id: "observer", label: "Se cacher et l'observer", desc: "Comprendre son comportement.", check: { role: "sci", chance: 0.6 }, success: { text: "Caché derrière la tour, vous enregistrez ses allers-retours : il ne patrouille qu'entre la tour et le lac. Un gardien.", flags: ["drone_compris"], effects: { donnees: 15 } }, fail: { text: "Le drone vous repère et lâche une décharge d'avertissement.", effects: { integrite: -10 } }, next: "camp" }
+        ]
+      },
+      village: {
+        title: "Les Vélans", env: "domes",
+        text: ["Le village vélan est fait de dômes de glace reliés par des tunnels. Les habitants, emmitouflés de fourrures, vous accueillent avec méfiance. Une vieille femme, Maïra, s'avance.", "Elle montre la tour du doigt et dit un seul mot, que tous répètent à voix basse : « Dormeurs »."],
+        secrets: {
+          arch: "Maïra parle un vélan ancien. Vous comprenez qu'elle a peur que vous « réveilliez la colère » en touchant à la tour.",
+          sci: "Un enfant tousse dans un dôme voisin. Une simple infection, que votre trousse pourrait soigner.",
+          guer: "Les chasseurs vélans ont des lances, mais aucun ne vous menace. Ils protègent leurs familles.",
+          chef: "Le commandement aimerait un traité avec ce peuple. Un geste de bonne volonté aiderait."
+        },
+        memory: "Chez les Vélans, l'échange précède la parole : offrir quelque chose d'utile ouvre toutes les portes.",
+        choices: [
+          { id: "echanger", label: "Échanger une batterie contre leur savoir", desc: "Leur offrir de l'énergie.", cost: { energie: -15 }, outcome: { text: "Maïra accepte la batterie avec émotion : de la chaleur pour l'hiver. En échange, elle vous confie une tablette de bois : le lexique vélan complet, neuf mots sacrés.", flags: ["lexique"], effects: { donnees: 10 }, log: { kind: "decouverte", text: "Lexique vélan obtenu" } }, next: "camp" },
+          { id: "soigner", label: "Soigner l'enfant malade", desc: "Le scientifique ou le médecin intervient.", req: { role: "sci" }, cost: { integrite: -5 }, outcome: { text: "L'enfant respire mieux en quelques minutes. Maïra vous prend les mains et raconte la légende : « Les Dormeurs se réveilleront quand la tour chantera leur nom. Ils dorment sous le lac depuis l'hiver sans fin. »", flags: ["allies", "legende"], effects: { donnees: 10 } }, next: "camp" },
+          { id: "interroger", label: "Interroger Maïra sur la tour", desc: "L'archéologue mène la discussion.", check: { role: "arch", chance: 0.6 }, success: { text: "Maïra finit par parler : les Dormeurs sont les ancêtres des Vélans, endormis sous le lac pendant une grande glaciation. « Nous attendons leur retour depuis des générations. »", flags: ["legende"], effects: { donnees: 10 } }, fail: { text: "Vos questions trop directes froissent le village. Maïra se tait et vous raccompagne.", effects: { menace: 1 } }, next: "camp" }
+        ]
+      },
+      lac: {
+        title: "Le lac gelé", env: "ice",
+        text: ["Le lac est une plaine de glace noire et lisse. Sous vos pieds, très loin, on devine des lueurs bleues, alignées comme des lampes dans un couloir.", "La glace craque parfois, avec un bruit de tonnerre."],
+        secrets: {
+          sci: "Un forage de 20 mètres permettrait d'envoyer une caméra jusqu'aux lueurs. Il faudra 20 d'énergie.",
+          guer: "La glace est fine par endroits. Je peux repérer les zones sûres, mais pas toutes.",
+          arch: "Des pierres levées entourent le lac, gravées d'hommes couchés. Un cimetière… ou un dortoir.",
+          chef: "Ne risquez pas l'équipe sur une glace fragile pour une simple curiosité."
+        },
+        scan: "Les lueurs sont des capsules. Les signes de vie à l'intérieur sont faibles mais stables.",
+        recon: "Forer sans repérage : dangereux. Les capteurs de surface : sûrs.",
+        choices: [
+          { id: "forer", label: "Forer la glace", desc: "Envoyer une caméra. 20 d'énergie.", cost: { energie: -20 }, check: { role: "sci", chance: 0.6 }, success: { text: "La caméra descend dans un puits bleu… et filme des dizaines de capsules transparentes. Dans chacune, une personne endormie.", flags: ["capsules_vues"], effects: { donnees: 25 }, log: { kind: "decouverte", text: "Capsules de stase filmées sous le lac" } }, fail: { text: "La glace se fend autour du forage. Un membre de l'équipe passe à travers et est repêché, frigorifié.", effects: { integrite: -20 } }, next: "camp" },
+          { id: "capteurs", label: "Poser des capteurs en surface", desc: "Prudent mais moins précis.", outcome: { text: "Les capteurs enregistrent une activité régulière, comme des dizaines de cœurs battant très lentement.", effects: { donnees: 15 } }, next: "camp" },
+          { id: "pierres", label: "Étudier les pierres levées", desc: "L'archéologue relève les gravures.", req: { role: "arch" }, outcome: { text: "Les gravures montrent des gens qui se couchent sous la glace et, plus loin, les mêmes qui se relèvent au son d'une tour.", flags: ["legende"], effects: { donnees: 10 } }, next: "camp" }
+        ]
+      },
+      hypothese: {
+        title: "L'hypothèse", env: "tower",
+        text: ["Le moment est venu de trancher. Le commandement attend votre analyse : qu'est-ce que ce signal, et que faut-il faire ?", "Mettez en commun tout ce que vous savez. Ce vote décide de la fin de la mission."],
+        secrets: {
+          sci: [{ if: { flags: ["capsules_vues"] }, text: "Des capsules de stase occupées. Ce n'est pas une arme." }, { text: "Il manque des données sur ce qu'il y a sous le lac." }],
+          arch: [{ if: { flags: ["decode"] }, text: "Le signal dit « nous dormons sous la glace ». C'est un message, pas une menace." }, { text: "Sans traduction, impossible de savoir ce que dit le signal." }],
+          guer: [{ if: { any: [{ flags: ["paix"] }, { flags: ["drone_compris"] }] }, text: "Le drone ne vous a jamais attaqués sans raison. C'est un gardien, pas un soldat." }, { text: "Le drone a montré qu'il pouvait frapper." }],
+          chef: "Le commandement penche pour une arme. Mais c'est vous qui êtes sur le terrain."
+        },
+        memory: [{ if: { flags: ["legende"] }, text: "« Ils se réveilleront quand la tour chantera leur nom. » La tour chante. Il ne manque que quelqu'un pour répondre." }, { text: "Les peuples des mondes glacés se mettaient parfois en sommeil pour survivre aux grands hivers." }],
+        choices: [
+          { id: "arme", label: "C'est une arme : détruire la tour", desc: "Mettre fin au signal.", danger: true, outcome: { text: "La charge fait s'effondrer la tour. Le signal se tait… et sous le lac, les lueurs bleues s'éteignent une à une. Le cristal alimentait les capsules.", flags: ["detruit_tour"], effects: { donnees: 5 }, log: { kind: "decision", text: "La tour est détruite" } }, next: "END" },
+          { id: "colonie", label: "Une colonie endormie : tenter le réveil", desc: "Répondre au signal.", outcome: [
+            { if: { flags: ["decode"], any: [{ flags: ["capsules_vues"] }, { flags: ["legende"] }] }, text: "Vous émettez la réponse vélane dans la tour : « Partir — attendre — fini ». Sous le lac, la glace s'illumine. Les Dormeurs se réveillent.", flags: ["reveil"], effects: { donnees: 20 }, next: "reveil" },
+            { if: { flags: ["decode"] }, text: "Vous répondez au signal à tâtons. La tour hésite… puis, sous le lac, la glace s'illumine. Le réveil est lancé, mais il est brutal.", flags: ["reveil"], effects: { integrite: -10, donnees: 10 }, next: "reveil" },
+            { text: "Sans comprendre le signal, vous tentez de le renvoyer à la tour. Une alarme stridente : le drone et ses semblables jaillissent du lac et vous chassent jusqu'à la Porte.", flags: ["echec_reveil"], effects: { integrite: -25 } }
+          ], next: "END" },
+          { id: "piege", label: "Un piège : se retirer", desc: "Ne prendre aucun risque.", outcome: { text: "Vous rentrez à la base avec vos enregistrements. Le signal continue de résonner, quelque part dans la glace.", flags: ["retraite"] }, next: "END" },
+          { id: "naturel", label: "Un phénomène naturel : rapporter les données", desc: "Laisser les chercheurs trancher.", outcome: { text: "Vous rentrez avec toutes vos mesures. Les chercheurs de la base auront de quoi s'occuper pendant des mois.", flags: ["rapport"], effects: { donnees: 10 } }, next: "END" }
+        ],
+        defaultChoice: "naturel"
+      },
+      reveil: {
+        title: "Les Dormeurs", env: "ice",
+        text: ["Des silhouettes émergent de puits de lumière ouverts dans la glace. Une femme aux yeux pâles s'approche, chancelante. Elle prononce un mot vélan : « Merci ».", "Les Dormeurs sont des centaines. Ils ont froid, ils ont peur, et ils ne savent pas combien de siècles ont passé."],
+        secrets: {
+          chef: "Le commandement voudra leurs connaissances. Mais ce sont des réfugiés, pas des prisonniers.",
+          arch: "Ils parlent un vélan très ancien. Ils sont les ancêtres du village. Maïra va pleurer de joie.",
+          sci: "Le réveil les a épuisés. Ils ont besoin de chaleur, vite.",
+          guer: [{ if: { flags: ["drone_detruit"] }, text: "Sans leur drone gardien, ils sont sans défense. Ils le cherchent des yeux." }, { text: "Le drone tourne autour d'eux, protecteur. Il vous ignore désormais." }]
+        },
+        choices: [
+          { id: "village", label: "Les conduire au village vélan", desc: "Réunir deux peuples séparés par la glace.", outcome: { text: "La procession traverse la plaine jusqu'au village. Les Vélans sortent des dômes, incrédules, puis courent vers leurs ancêtres. Maïra vous serre dans ses bras.", flags: ["reunis"], log: { kind: "decision", text: "Les Dormeurs rejoignent les Vélans" } }, next: "END" },
+          { id: "transmettre", label: "Transmettre leur savoir au commandement", desc: "Enregistrer tout ce qu'ils savent.", outcome: { text: "Les Dormeurs vous confient les archives de leur civilisation, en échange d'une aide médicale. Le commandement exulte.", flags: ["transmis"], effects: { donnees: 30 } }, next: "END" }
+        ]
+      },
+      blizzard: {
+        title: "Blizzard", env: "ice", noThreat: true,
+        text: ["Le ciel devient blanc, puis noir. Un blizzard d'une violence extrême s'abat sur la plaine. Visibilité nulle. Rester dehors, c'est risquer de ne jamais revenir."],
+        radio: "Équipe, la météo est catastrophique. Repliez-vous immédiatement.",
+        secrets: { sci: "Température en chute libre : −50 °C dans une heure.", guer: "On peut s'abriter dans la tour, ou foncer à la Porte. Pas d'autre option.", arch: "Les Vélans appellent ces tempêtes « le souffle des Dormeurs ».", chef: "Le commandement veut que vous rentriez." },
+        choices: [
+          { id: "porte", label: "Foncer vers la Porte", desc: "Fin de la mission.", outcome: { text: "Vous rentrez, gelés, guidés par la balise de la Porte." }, next: "END" },
+          { id: "abri", label: "S'abriter et continuer", desc: "Attendre une accalmie, coûte de la santé.", outcome: { text: "Vous attendez des heures dans un abri de fortune. La tempête finit par se calmer.", effects: { integrite: -15, temps: 2 } }, next: "$resume" }
+        ]
+      },
+      chasse: {
+        title: "Les gardiens en chasse", env: "ice", noThreat: true,
+        text: ["Trois drones de cristal surgissent du lac et foncent vers vous. Cette fois, ils ne posent pas de question."],
+        secrets: { guer: "Ils ont été réveillés par vos actions. Ils visent les armes levées.", sci: "Un brouillage radio sur leur fréquence pourrait les désorienter (15 d'énergie).", arch: "Ils obéissent au chant de la tour.", chef: "Protégez l'équipe avant tout." },
+        choices: [
+          { id: "brouiller", label: "Brouiller leurs signaux", desc: "15 d'énergie.", cost: { energie: -15 }, outcome: { text: "Les drones tournoient, désorientés, puis repartent vers le lac.", effects: { menace: -2 } }, next: "$resume" },
+          { id: "terre", label: "Se jeter à terre, armes baissées", desc: "Espérer qu'ils passent.", check: { role: "guer", chance: 0.6 }, success: { text: "Les drones vous survolent sans tirer, puis s'éloignent.", effects: { menace: -2 } }, fail: { text: "Une décharge vous frappe avant qu'ils ne repartent.", effects: { integrite: -20, menace: -1 } }, next: "$resume" }
+        ]
+      }
+    },
+    events: [
+      { id: "crevasse", title: "Crevasse", text: "Le sol s'ouvre sous les pieds d'un équipier, rattrapé de justesse par la corde.", effects: { integrite: -10 } },
+      { id: "froid", title: "Froid mordant", text: "Le froid vide les batteries plus vite que prévu.", effects: { energie: -10 } },
+      { id: "aurore", title: "Aurore", tone: "good", text: "Une aurore magnifique illumine le ciel. Les capteurs enregistrent au passage des données précieuses.", effects: { donnees: 10 } },
+      { id: "chasseurs", title: "Chasseurs vélans", tone: "good", text: "Des chasseurs vélans vous offrent une boisson chaude et vous montrent un raccourci.", effects: { integrite: 5, temps: 1 } },
+      { id: "echo", title: "Écho du signal", text: "Le signal s'intensifie un instant et sature toutes vos radios.", effects: { menace: 1 } }
+    ],
+    endings: [
+      { type: "critique", dead: true, title: "Perdus dans la glace", text: "Le froid et les blessures ont eu raison de l'équipe. Les secours vous retrouvent près de la Porte, en hypothermie. La mission est un échec." },
+      { type: "critique", cond: { flags: ["detruit_tour"] }, title: "Le silence des Dormeurs", text: "Le signal s'est tu. En détruisant la tour, vous avez coupé l'énergie qui maintenait en vie des centaines de personnes endormies. Le commandement classe le rapport « secret ». Les Vélans ne vous pardonneront jamais." },
+      { type: "exceptionnelle", cond: { flags: ["reveil", "decode"], notFlags: ["drone_detruit"], any: [{ flags: ["reunis"] }, { flags: ["transmis"] }], min: { integrite: 50 } }, title: "Le retour des Dormeurs", text: "Un peuple entier, endormi depuis des siècles, est revenu à la vie grâce à votre analyse. Les Vélans et leurs ancêtres sont réunis, et le gardien de cristal veille toujours. C'est l'une des plus grandes découvertes du programme." },
+      { type: "parfaite", cond: { flags: ["reveil"] }, title: "Signal compris", text: "Vous avez compris le signal et réveillé les Dormeurs. Le premier contact s'est fait sans violence. Le commandement salue votre jugement." },
+      { type: "partielle", cond: { any: [{ flags: ["decode"] }, { min: { donnees: 50 } }] }, title: "Une moitié de réponse", text: "Vous rentrez avec des éléments solides sur le signal, mais sans être allés au bout. Une seconde équipe devra terminer le travail." },
+      { type: "controle", title: "Mystère entier", text: "Vous rentrez sain et sauf, mais le signal reste un mystère. Le commandement fera une nouvelle tentative." }
+    ],
+    secondaries: [
+      { text: "Traduire le signal", cond: { flags: ["decode"] } },
+      { text: "Gagner l'amitié des Vélans", cond: { any: [{ flags: ["allies"] }, { flags: ["lexique"] }] } },
+      { text: "Épargner le drone gardien", cond: { notFlags: ["drone_detruit"], visited: ["drone"] } },
+      { text: "Filmer les capsules de stase", cond: { flags: ["capsules_vues"] } }
+    ],
+    codex: [
+      { id: "velans", title: "Les Vélans", cond: { any: [{ flags: ["legende"] }, { flags: ["lexique"] }] }, text: "Peuple des glaces de P4X-219. Ils attendaient depuis des générations le retour de leurs ancêtres, les Dormeurs." },
+      { id: "dormeurs", title: "Les Dormeurs", cond: { flags: ["reveil"] }, text: "Une population entière mise en stase sous un lac pour survivre à une glaciation. Le signal de la tour était leur réveil programmé, resté sans réponse." },
+      { id: "gardien", title: "Le gardien de cristal", cond: { any: [{ flags: ["paix"] }, { flags: ["drone_compris"] }] }, text: "Un drone autonome qui protège les capsules depuis des siècles. Il ne frappe que les armes pointées vers ceux qu'il garde." }
+    ]
+  };
+
+  /* =====================================================================================
+     MISSION 3 — P8X-602 « LE DERNIER AVANT-POSTE »
+     ===================================================================================== */
+  M.m3 = {
+    id: "m3", code: "P8X-602", name: "Le Dernier Avant-poste", sub: "Base abandonnée · survie · 45 à 60 min", env: "outpost",
+    duration: "45–60 min", difficultyLabel: "Exigeante", energyThreat: true,
+    itemNames: { pendentif: "Pendentif lumineux" },
+    briefing: {
+      time: "Briefing — 03 h 15, mission d'urgence",
+      lines: ["Il y a un an, un peuple allié, les Kelsiens, a ouvert un avant-poste de recherche sur P8X-602. Il ne répond plus depuis six mois.", "Leur gouvernement vous demande de récupérer le noyau de données de la base, et de retrouver d'éventuels survivants.", "Attention : chaque appareil allumé consomme de l'énergie, et ici l'énergie attire quelque chose."],
+      objectives: ["Récupérer le noyau de données kelsien", "Retrouver des survivants", "Ne rien ramener de dangereux sur Terre"],
+      known: ["Avant-poste kelsien sans courant", "Dernier message : « Ils viennent avec la lumière »", "Atmosphère respirable"],
+      risks: ["Chaque dépense d'énergie fait monter la menace", "Contamination inconnue", "Effondrements"],
+      secret: {
+        chef: "Le gouvernement kelsien insiste sur le noyau. Il a très peu parlé des survivants. C'est suspect.",
+        sci: "Ce monde présente des micro-décharges électriques qui se déplacent contre le vent. Comme si elles étaient vivantes.",
+        arch: "Dans l'écriture kelsienne, les dates s'écrivent jour puis mois. Les Kelsiens comptent les mois de 1 à 12, comme nous.",
+        guer: "Le dernier message vidéo de la base montre des éclairs dans les couloirs et un soldat qui éteint sa lampe en criant « Éteignez tout ! »."
+      }
+    },
+    start: { energie: 70, temps: 9, menace: 1, donnees: 0 },
+    startScene: "arrivee", timeoutScene: "crepuscule", threatScene: "essaim", threatAt: 4,
+    scenes: {
+      arrivee: {
+        title: "La cour de l'avant-poste", env: "outpost",
+        text: ["La Porte se dresse dans une cour bétonnée, cernée de bâtiments éteints. Le ciel est violet, sans soleil. Pas un bruit, pas un mouvement.", "Sur les murs, de longues traces de brûlure en étoile. Au fond, la porte du bâtiment principal pend sur ses gonds."],
+        radio: "Base, ici l'équipe. Arrivée sur P8X-602. L'avant-poste semble désert.",
+        secrets: {
+          sci: "Vos capteurs détectent des micro-décharges qui se rapprochent dès que vous allumez un appareil. Chaque dépense d'énergie les attire.",
+          guer: "Des impacts de brûlure partout, mais aucun corps. Ce qui a attaqué ici ne laisse rien derrière lui.",
+          arch: "Au fronton, une inscription kelsienne : « Ici, la lumière se mérite ». Les Kelsiens écrivent les dates jour, puis mois.",
+          chef: "Ordre du gouvernement kelsien : le noyau de données d'abord. Les survivants, ensuite."
+        },
+        scan: "Les micro-décharges se rassemblent autour des sources d'énergie, comme des papillons de nuit autour d'une lampe.",
+        recon: "Les projecteurs vous aideront à voir, mais ils feront monter la menace.",
+        choices: [
+          { id: "projecteurs", label: "Allumer les projecteurs", desc: "Y voir clair, mais dépenser de l'énergie.", cost: { energie: -10 }, outcome: { text: "La cour s'illumine. Au loin, des étincelles bleues se mettent à danser… et à se rapprocher.", effects: { donnees: 10 } }, next: "hall" },
+          { id: "lampes", label: "Avancer à la lampe frontale", desc: "Lent, discret, économe.", outcome: { text: "Vous avancez dans la pénombre, en silence, jusqu'au hall principal.", effects: { temps: -1 } }, next: "hall" }
+        ]
+      },
+      hall: {
+        title: "Le tableau électrique", env: "lab",
+        text: ["Le hall est noir. Un tableau électrique kelsien commande quatre relais, marqués A, B, C et D. Il faut en enclencher trois, dans le bon ordre, pour rétablir le courant intérieur.", "Seul le scientifique peut manipuler le tableau sans s'électrocuter. Les autres doivent lui donner les bonnes informations."],
+        puzzle: {
+          type: "sequence", solver: "sci", attempts: 3,
+          prompt: "Enclenchez trois relais dans le bon ordre.",
+          display: "[A]   [B]   [C]   [D]",
+          options: [{ id: "A", label: "Relais A", icon: "A" }, { id: "B", label: "Relais B", icon: "B" }, { id: "C", label: "Relais C", icon: "C" }, { id: "D", label: "Relais D", icon: "D" }],
+          answer: ["C", "A", "B"],
+          clues: {
+            sci: "Schéma du réseau : la ventilation (« Souffle ») doit repartir en premier, sinon les circuits surchauffent.",
+            arch: "Les étiquettes kelsiennes des relais : A = « Cœur », B = « Portes », C = « Souffle », D = « Phares ».",
+            chef: "Note manuscrite du dernier directeur, scotchée au tableau : « Ne JAMAIS rallumer les Phares. Ils les attirent. »",
+            guer: "Le relais B a un voyant rouge : il ne s'enclenche que si le relais A est déjà sous tension."
+          },
+          hint: "Souffle d'abord, puis le Cœur, puis les Portes. Jamais les Phares.",
+          scan: "Le relais D alimente des balises extérieures. Les micro-décharges sont toutes tournées vers elles.",
+          failAttempt: { effects: { menace: 1 } },
+          success: { text: "La ventilation ronronne, les lumières de secours s'allument, les portes blindées se déverrouillent. L'avant-poste revit, juste assez.", flags: ["courant"], effects: { donnees: 10 }, log: { kind: "note", text: "Courant intérieur rétabli" }, next: "couloirs" },
+          fail: { text: "Des étincelles, une odeur de brûlé : le tableau grille. Vous devrez ouvrir les portes à la main.", effects: { temps: -2, integrite: -10 }, next: "couloirs" }
+        }
+      },
+      couloirs: {
+        title: "Les couloirs", env: "lab",
+        text: ["Trois couloirs partent du hall. Des panneaux kelsiens indiquent : LABORATOIRE (sas scellé), NOYAU DE DONNÉES, QUARTIERS. Un quatrième chemin ramène à la cour et à la Porte.", "Dehors, les étincelles bleues grésillent contre les vitres."],
+        secrets: {
+          sci: [{ if: { flags: ["courant"] }, text: "Le laboratoire scellé consomme du courant : un système de survie fonctionne là-dedans. Quelqu'un est vivant." }, { text: "Sans courant, impossible de savoir si le laboratoire abrite des survivants." }],
+          guer: "Plus on reste longtemps, plus les choses du dehors se rassemblent.",
+          arch: "Sur la porte des quartiers, un calendrier kelsien arrêté. Les gens notaient tout, ici.",
+          chef: "Le noyau d'abord, d'après les ordres. Mais un survivant pourrait tout expliquer."
+        },
+        choices: [
+          { id: "labo", label: "Le laboratoire scellé", desc: "Des signes de vie ?", once: true, next: "labo" },
+          { id: "noyau", label: "La salle du noyau de données", desc: "L'objectif principal.", once: true, next: "noyau" },
+          { id: "quartiers", label: "Les quartiers d'habitation", desc: "Comprendre ce qui s'est passé.", once: true, cost: { temps: -1 }, next: "quartiers" },
+          { id: "depart", label: "Retourner à la Porte", desc: "Préparer le départ.", next: "depart" }
+        ],
+        defaultChoice: "depart"
+      },
+      quartiers: {
+        title: "Les quartiers", env: "lab",
+        text: ["Des chambres abandonnées en hâte. Des tasses encore sur les tables, des vêtements sur les lits. Sur un bureau, un journal personnel. Sur une étagère, un pendentif qui brille d'une douce lueur bleue.", "Vous pouvez fouiller, ou repartir."],
+        secrets: {
+          sci: "Le pendentif émet exactement la même signature énergétique que les micro-décharges du dehors.",
+          arch: "Le journal appartient au Dr Ressa, une biologiste. Dernière page : « Ils pondent dans tout ce qui brille. »",
+          guer: "Le pendentif est le seul objet de la pièce qui n'est pas couvert de poussière.",
+          chef: "Le gouvernement kelsien paierait cher pour des échantillons. Mais à quel prix ?"
+        },
+        scan: "Le pendentif contient une petite masse vivante, en sommeil.",
+        memory: "Les Kelsiens offraient des bijoux lumineux pour porter chance. Une tradition que les créatures semblent exploiter.",
+        recon: "Le pendentif est dangereux.",
+        choices: [
+          { id: "journal", label: "Lire le journal du Dr Ressa", desc: "Comprendre ce qui s'est passé.", once: true, outcome: { text: "Le Dr Ressa décrit les « Phalènes » : des créatures d'énergie attirées par la lumière. Elle s'est enfermée dans le laboratoire avec un traitement expérimental. Elle a changé le code du noyau : « la date de notre arrivée ».", flags: ["journal"], effects: { donnees: 15 }, log: { kind: "decouverte", text: "Journal du Dr Ressa : les Phalènes" } }, next: "quartiers" },
+          { id: "pendentif", label: "Emporter le pendentif", desc: "Un échantillon pour les chercheurs.", once: true, outcome: { text: "Vous glissez le pendentif dans une poche. Il est tiède, presque vivant.", items: ["pendentif"], flags: ["contamination"], effects: { donnees: 15 } }, next: "quartiers" },
+          { id: "repartir", label: "Revenir aux couloirs", desc: "Assez vu.", outcome: { text: "Vous refermez la porte des quartiers derrière vous." }, next: "couloirs" }
+        ],
+        defaultChoice: "repartir"
+      },
+      noyau: {
+        title: "Le noyau de données", env: "lab",
+        text: ["Une colonne de verre noir, parcourue de lumière. Le noyau de données kelsien. Un écran demande un code à quatre chiffres : « DATE D'ARRIVÉE ».", "Le chef d'équipe a les codes d'accès du gouvernement kelsien : c'est lui qui doit saisir le code. Les autres connaissent les morceaux de la réponse."],
+        puzzle: {
+          type: "code", solver: "chef", attempts: 3,
+          prompt: "Entrez le code à quatre chiffres.",
+          display: "DATE D'ARRIVÉE :  _ _ / _ _",
+          answer: "1403",
+          clues: {
+            arch: "Les Kelsiens écrivent les dates jour, puis mois, sur deux chiffres chacun : JJMM.",
+            guer: "Sur le mur du hangar, une plaque commémorative : « Arrivés le quatorzième jour ».",
+            sci: "Les registres du réseau indiquent que les premiers relevés de la base datent du 3e mois de l'année kelsienne.",
+            chef: [{ if: { flags: ["journal"] }, text: "Le journal du Dr Ressa confirme : le code est « la date de notre arrivée ». Rassemblez le jour et le mois." }, { text: "Le gouvernement kelsien vous a dit : le code est une date. Chaque erreur coûte de l'énergie au noyau." }]
+          },
+          hint: "Jour 14, mois 3 : deux chiffres chacun.",
+          scan: "Le noyau consomme de l'énergie à chaque tentative ratée. Au bout de trois, il s'effacera.",
+          failAttempt: { effects: { energie: -10 } },
+          success: { text: "L'écran clignote en vert. Le noyau se détache de son socle : six mois de recherches kelsiennes, intacts.", flags: ["donnees_core"], effects: { donnees: 40 }, log: { kind: "objectif", text: "Noyau de données récupéré" }, next: "couloirs" },
+          fail: { text: "« EFFACEMENT ». Le noyau se vide sous vos yeux. Vous n'en sauvez que des fragments.", flags: ["core_efface"], effects: { donnees: 10 }, next: "couloirs" }
+        }
+      },
+      labo: {
+        title: "Le laboratoire scellé", env: "lab",
+        text: ["Derrière la vitre du sas, une femme amaigrie lève la tête. Elle tape contre la vitre, puis montre l'interphone. C'est le Dr Ressa. Vivante.", "« Ne restez pas ici. Ils sentent l'énergie. Et quoi que vous fassiez, ne ramenez rien qui brille. »"],
+        secrets: {
+          sci: [{ if: { flags: ["courant"] }, text: "Le sas peut s'ouvrir électriquement maintenant que le courant est rétabli." }, { text: "Sans courant, le sas ne s'ouvrira qu'en le forçant." }],
+          guer: "Le sas est solide. Le forcer demandera de la force et du bruit.",
+          arch: "Elle parle kelsien, mais connaît quelques mots de votre langue. Elle a peur, pas de vous : de ce qui est dehors.",
+          chef: "Le gouvernement kelsien n'a pas parlé d'elle. Pourquoi ?"
+        },
+        memory: "Le Dr Ressa est citée dans les archives kelsiennes comme spécialiste des parasites énergétiques.",
+        choices: [
+          { id: "ouvrir", label: "Ouvrir le sas électriquement", desc: "Grâce au courant rétabli.", req: { flags: ["courant"] }, outcome: { text: "Le sas s'ouvre en sifflant. Le Dr Ressa vous suit, faible mais lucide : « Avant de composer l'adresse, coupez les générateurs. Et passez tous au scanner de quarantaine. »", flags: ["survivant", "avertie"], effects: { donnees: 10 }, log: { kind: "objectif", text: "Le Dr Ressa est sauvée" } }, next: "couloirs" },
+          { id: "forcer", label: "Forcer le sas", desc: "Le guerrier s'en charge.", req: { notFlags: ["courant"] }, check: { role: "guer", chance: 0.6 }, success: { text: "Le sas cède. Le Dr Ressa vous rejoint : « Coupez les générateurs avant de partir, et passez à la quarantaine. »", flags: ["survivant", "avertie"], effects: { menace: 1 } }, fail: { text: "Le sas cède enfin, mais le vacarme a attiré des étincelles dans le couloir. Brûlés, vous évacuez le Dr Ressa.", flags: ["survivant", "avertie"], effects: { integrite: -15, menace: 1 } }, next: "couloirs" },
+          { id: "interphone", label: "Lui parler par l'interphone", desc: "Obtenir des informations sans risque.", outcome: { text: "Elle vous explique tout : les Phalènes, attirées par l'énergie, pondent dans les objets lumineux. « Coupez tout avant de partir. Passez à la quarantaine. Revenez me chercher plus tard. »", flags: ["avertie"], effects: { donnees: 10 } }, next: "couloirs" }
+        ]
+      },
+      depart: {
+        title: "Départ sous l'essaim", env: "outpost",
+        text: ["Dans la cour, un nuage d'étincelles bleues tourbillonne autour de la Porte. Les Phalènes. Composer l'adresse demandera beaucoup d'énergie : elles vont se jeter sur vous.", "Un scanner de quarantaine kelsien est installé à l'entrée de la cour."],
+        secrets: {
+          sci: [{ if: { flags: ["courant"] }, text: "Si l'on coupe tous les générateurs de la base juste avant de composer, la Porte sera la seule source d'énergie… pendant quelques secondes, l'essaim sera désorienté." }, { text: "Sans le réseau de la base, impossible de faire diversion : il faudra composer en force." }],
+          guer: "Je peux couvrir la composition, mais elles sont des centaines.",
+          arch: [{ if: { flags: ["contamination"] }, text: "Le pendentif brille plus fort dans votre poche. Il réagit à l'essaim." }, { text: "Les Kelsiens passaient tous au scanner avant de franchir la Porte. Une règle stricte." }],
+          chef: [{ if: { flags: ["avertie"] }, text: "Le Dr Ressa a été claire : générateurs coupés, quarantaine, puis départ." }, { text: "Le gouvernement kelsien n'a parlé d'aucune procédure de départ." }]
+        },
+        scan: [{ if: { flags: ["contamination"] }, text: "ALERTE : une signature de Phalène dans l'équipe. Le pendentif contient un œuf." }, { text: "Aucune signature étrangère dans l'équipe pour l'instant." }],
+        choices: [
+          { id: "quarantaine", label: "Passer au scanner de quarantaine", desc: "Vérifier que personne ne ramène rien. 1 heure.", once: true, cost: { temps: -1 }, outcome: [{ if: { flags: ["contamination"] }, text: "Le scanner hurle : le pendentif contient un œuf de Phalène ! Vous le jetez dans l'incinérateur.", flags: ["quarantaine"], unflags: ["contamination"], loseItems: ["pendentif"], log: { kind: "decision", text: "Œuf de Phalène détruit en quarantaine" } }, { text: "Le scanner ne détecte rien. L'équipe est saine.", flags: ["quarantaine"] }], next: "depart" },
+          { id: "couper", label: "Couper les générateurs et composer", desc: "La méthode du Dr Ressa.", req: { flags: ["courant"] }, outcome: { text: "Noir total. L'essaim se disperse, désorienté, au moment où les chevrons s'allument. Vous plongez dans le vortex avant qu'il ne revienne.", effects: { menace: -2 } }, next: "END" },
+          { id: "force", label: "Composer en force", desc: "Tirer dans l'essaim et foncer.", danger: true, check: { role: "guer", chance: 0.5 }, success: { text: "Vous composez sous une pluie d'étincelles. Tout le monde passe, de justesse." }, fail: { text: "L'essaim s'abat sur l'équipe pendant la composition. Vous passez, brûlés.", effects: { integrite: -25 } }, next: "END" },
+          { id: "attendre", label: "Retourner aux couloirs", desc: "Il reste des choses à faire.", outcome: { text: "Vous reculez dans le hall, en attendant de savoir quoi faire." }, next: "couloirs" }
+        ],
+        defaultChoice: "force"
+      },
+      crepuscule: {
+        title: "La nuit violette", env: "outpost", noThreat: true,
+        text: ["Le ciel vire au noir d'encre. Avec la nuit, les Phalènes sortent par milliers. L'avant-poste devient un piège.", "Il faut partir, ou se terrer jusqu'à l'aube."],
+        radio: "Équipe, nous perdons votre signal. Rentrez immédiatement.",
+        secrets: { sci: "La nuit, l'essaim double de volume.", guer: "Le hall est le seul endroit tenable.", arch: "Les Kelsiens appelaient la nuit « l'heure des Phares ».", chef: "Le commandement vous ordonne de rentrer." },
+        choices: [
+          { id: "partir", label: "Foncer vers la Porte", desc: "Tenter le départ maintenant.", outcome: { text: "Vous rassemblez l'équipe et courez vers la cour." }, next: "depart" },
+          { id: "terrer", label: "Se barricader dans le hall", desc: "Attendre l'aube, au prix de blessures.", outcome: { text: "Une nuit interminable, à repousser des étincelles. À l'aube, vous êtes épuisés mais vivants.", effects: { integrite: -15, temps: 2, menace: 1 } }, next: "$resume" }
+        ]
+      },
+      essaim: {
+        title: "L'essaim", env: "outpost", noThreat: true,
+        text: ["Un grésillement assourdissant. Des centaines de Phalènes envahissent le couloir, attirées par votre énergie. L'air crépite."],
+        secrets: { sci: "Elles suivent la lumière. Si l'on éteint tout, elles perdent votre trace.", guer: "Les fusées éclairantes peuvent les attirer ailleurs.", arch: "Les Kelsiens chantaient pour couvrir le bruit. Ça ne sert à rien, mais ça calme.", chef: "Ne laissez personne derrière." },
+        choices: [
+          { id: "eteindre", label: "Tout éteindre et ne plus bouger", desc: "Attendre dans le noir.", outcome: { text: "Dans le noir complet, l'essaim tourne en rond, puis se disperse.", effects: { menace: -2, temps: -1 } }, next: "$resume" },
+          { id: "fusees", label: "Lancer des fusées éclairantes au loin", desc: "Les attirer ailleurs.", check: { role: "guer", chance: 0.6 }, success: { text: "L'essaim se rue sur les fusées, à l'autre bout de la base.", effects: { menace: -2 } }, fail: { text: "Une fusée retombe trop près : l'essaim vous frôle et brûle l'équipe.", effects: { integrite: -20, menace: -1 } }, next: "$resume" }
+        ]
+      }
+    },
+    events: [
+      { id: "court", title: "Court-circuit", text: "Un câble lâche dans un éclair. L'odeur de brûlé attire les Phalènes.", effects: { menace: 1 } },
+      { id: "plafond", title: "Effondrement", text: "Un pan de plafond s'écroule. Rien de grave, mais il faut dégager le passage.", effects: { integrite: -10, temps: -1 } },
+      { id: "batterie", title: "Batterie kelsienne", tone: "good", text: "Vous trouvez une batterie kelsienne chargée dans un placard.", effects: { energie: 15 } },
+      { id: "fichiers", title: "Terminal intact", tone: "good", text: "Un terminal intact vous livre des rapports de recherche.", effects: { donnees: 10 } },
+      { id: "etincelle", title: "Étincelle égarée", text: "Une Phalène isolée traverse l'équipe dans un crépitement.", effects: { integrite: -10 } }
+    ],
+    endings: [
+      { type: "critique", dead: true, title: "L'avant-poste a gagné", text: "L'essaim a eu raison de l'équipe. Les secours vous ramènent in extremis. L'avant-poste kelsien est déclaré zone interdite." },
+      { type: "critique", cond: { flags: ["contamination"] }, title: "Passager clandestin", text: "Trois jours après votre retour, des étincelles bleues apparaissent dans les couloirs de la base. Vous avez ramené un œuf de Phalène sur Terre. La base est mise en quarantaine totale." },
+      { type: "exceptionnelle", cond: { flags: ["donnees_core", "survivant", "quarantaine"], min: { integrite: 50 } }, title: "La lumière se mérite", text: "Le noyau, le Dr Ressa et toute l'équipe sont rentrés sains et saufs. Grâce à ses recherches, les Kelsiens disposent enfin d'un moyen de chasser les Phalènes. Le gouvernement kelsien vous décore… et s'explique enfin sur ses silences." },
+      { type: "parfaite", cond: { flags: ["donnees_core", "survivant"] }, title: "Mission accomplie", text: "Le noyau de données et le Dr Ressa sont en sécurité. Le gouvernement kelsien vous remercie chaleureusement." },
+      { type: "partielle", cond: { any: [{ flags: ["donnees_core"] }, { flags: ["survivant"] }] }, title: "Une partie du chemin", text: "Vous avez accompli une partie de la mission. Les Kelsiens sont reconnaissants, mais il reste du travail sur P8X-602." },
+      { type: "controle", title: "Retour les mains vides", text: "Vous rentrez sans le noyau et sans survivant, mais sans rien ramener de dangereux. Une seconde mission sera nécessaire." }
+    ],
+    secondaries: [
+      { text: "Rétablir le courant de l'avant-poste", cond: { flags: ["courant"] } },
+      { text: "Lire le journal du Dr Ressa", cond: { flags: ["journal"] } },
+      { text: "Passer la quarantaine avant de partir", cond: { flags: ["quarantaine"] } },
+      { text: "Garder la menace sous 3", cond: { max: { menace: 2 } } }
+    ],
+    codex: [
+      { id: "phalenes", title: "Les Phalènes", cond: { any: [{ flags: ["journal"] }, { flags: ["avertie"] }] }, text: "Créatures faites d'énergie, attirées par la lumière et l'électricité. Elles pondent dans les objets lumineux." },
+      { id: "ressa", title: "Dr Ressa", cond: { flags: ["survivant"] }, text: "Biologiste kelsienne, seule survivante de l'avant-poste. Six mois enfermée dans un laboratoire, à étudier ceux qui avaient tué ses collègues." },
+      { id: "kelsiens", title: "Les Kelsiens", cond: { flags: ["donnees_core"] }, text: "Un peuple allié, avancé et secret. Le noyau révèle qu'ils connaissaient le danger des Phalènes avant d'ouvrir l'avant-poste." }
+    ]
+  };
+
+  if (typeof module === "object" && module.exports) module.exports = M; else root.SG_MISSIONS = M;
+})(typeof self !== "undefined" ? self : this);
