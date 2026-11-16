@@ -114,6 +114,18 @@ html.tv{font-size:calc(100vh / 54)}
 .special.fin{background:linear-gradient(90deg,var(--pink),var(--violet));color:#fff}
 @keyframes pulse{50%{transform:scale(1.05)}}
 .arena{display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:3rem;min-height:0;padding:1rem 0}
+/* QCM : plateau compact pour que les 4 propositions tiennent toujours à l'écran */
+.game.qcm .arena{grid-template-columns:.72fr 1.28fr;gap:2rem;padding:.4rem 0}
+.game.qcm .disc-wrap{transform:scale(.62);margin:-6rem 0}
+.game.qcm .side{gap:.9rem;justify-content:center;min-height:0}
+.game.qcm .ring{width:10.5rem;height:10.5rem;flex:none}
+.game.qcm .ring .num{font-size:4.6rem}
+.game.qcm .status{font-size:1.9rem;min-height:0}
+.game.qcm .status small{font-size:1.25rem;margin-top:.2rem}
+.game.qcm .choices{max-width:none;gap:.8rem}
+.game.qcm .choice{padding:.75rem 1rem;font-size:1.45rem;line-height:1.2;gap:.8rem}
+.game.qcm .choice .k{width:2.4rem;height:2.4rem;font-size:1.7rem}
+.game.qcm .strip{padding:.4rem 0}
 .disc-wrap{position:relative;display:grid;place-items:center}
 .disc{width:26rem;height:26rem;border-radius:50%;background:repeating-radial-gradient(circle,#111 0 .35rem,#1c1c22 .35rem .7rem);box-shadow:0 0 0 .6rem rgba(255,255,255,.05),0 0 6rem rgba(255,46,136,.35);display:grid;place-items:center;animation:spin 3.2s linear infinite;animation-play-state:paused}
 .playing .disc{animation-play-state:running}
@@ -2037,7 +2049,7 @@ const Show = {
     const S = Game.S, cur = S.cur, r = cur.round;
     const sp = r.special && r.special !== 'mystery' ? SPECIALS[r.special] : null;
     const cat = r.cat && catById(r.cat) ? catById(r.cat) : null;
-    return `<div class="game">
+    return `<div class="game${Game.answerType(r) === 'qcm' ? ' qcm' : ''}">
       <div class="roundhead"><div class="roundno">MANCHE ${S.roundIdx + 1}<span>/${S.rounds.length}</span></div>${r.finale ? `<div class="special fin">🏆 FINALE ×${S.config.finalMult}</div>` : ''}${sp ? `<div class="special">${sp.icon} ${sp.name.toUpperCase()}</div>` : ''}${cat ? `<span class="badge">${cat.icon} ${esc(cat.name)}</span>` : ''}<span class="badge" id="duelBadge"></span></div>
       <div class="arena"><div class="disc-wrap" id="discwrap"><div class="viz">${Array.from({ length: 40 }, (_, i) => `<i style="transform:rotate(${i * 9}deg) translateY(14.6rem) scaleY(.2)"></i>`).join('')}</div><div class="disc"><div class="label">${sp ? sp.icon : '♪'}</div></div></div>
         <div class="side"><div class="ring" id="ring"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="7"/><circle id="ringc" cx="50" cy="50" r="44" fill="none" stroke="url(#rg)" stroke-width="7" stroke-linecap="round" stroke-dasharray="276.5" stroke-dashoffset="0"/><defs><linearGradient id="rg"><stop offset="0" stop-color="#2de2e6"/><stop offset="1" stop-color="#ff2e88"/></linearGradient></defs></svg><div class="num" id="ringn"></div></div>

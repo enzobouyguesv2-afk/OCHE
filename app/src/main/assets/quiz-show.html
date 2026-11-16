@@ -624,7 +624,7 @@ const TV = {
   renderSettings(force) {
     const html = '<div class="screen" id="settings"><div class="head"><h2>⚙ RÉGLAGES</h2><button class="tvbtn gold" data-act="lobby">✔ TERMINÉ</button></div><div class="grid">' +
       this.ROWS.map((r, i) => { const [k, lab, opts, unit] = r, cur = this.cfgGet(k), o = opts.find(x => (Array.isArray(x) ? x[0] : x) === cur); const lbl = o === undefined ? cur : Array.isArray(o) ? o[1] : o + (unit || ""); return '<button class="row" data-row="' + i + '"><span>' + esc(lab) + '</span><span class="val"><i data-dir="-1">◀</i>' + esc(lbl) + '<i data-dir="1">▶</i></span></button>'; }).join("") +
-      '</div><div class="foot"><span>Flèches ▲▼ pour choisir · ◀ ▶ pour changer · réglages enregistrés dans la télé</span><span>' + QS_BANK.questions.length + ' questions dans la banque</span></div></div>';
+      '</div><div class="foot"><span>Flèches pour se déplacer · OK pour changer la valeur · réglages enregistrés dans la télé</span><span>' + QS_BANK.questions.length + ' questions dans la banque</span></div></div>';
     const focusRow = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.row : null;
     if (this.build("settings:" + JSON.stringify(this.game.st.config), html) || force) {
       $$("#settings .row").forEach(b => b.onclick = e => { const d = e.target.closest("[data-dir]"); this.cycle(+b.dataset.row, d ? +d.dataset.dir : 1); });
@@ -803,7 +803,7 @@ const TV = {
       if (this.screen === "game" && S.phase !== "victory") { e.preventDefault(); this.openMenu(); return; }
     }
     const f = document.activeElement;
-    if (this.screen === "settings" && f && f.classList.contains("row") && (k === "ArrowLeft" || k === "ArrowRight")) { e.preventDefault(); this.cycle(+f.dataset.row, k === "ArrowRight" ? 1 : -1); return; }
+    // Réglages : les flèches ne font que déplacer le curseur (les deux colonnes sont accessibles) ; OK change la valeur.
     if ((k === "Enter" || k === "OK") && f && (f.tagName === "BUTTON")) return;
     if ((k === "Enter" || k === "OK") && this.screen === "game" && !menu) { e.preventDefault(); if (S.paused) { g.resume(Date.now()); return; } this.openMenu(); return; }
     if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(k)) {

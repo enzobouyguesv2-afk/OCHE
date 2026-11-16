@@ -475,8 +475,26 @@ function draw(){
   if(screen==="game"&&pub.phase==="GAME_OVER")confetti(pub);
 }
 /* ajuste la taille des mots trop longs pour leur carte */
-function fitWords(){root.querySelectorAll(".card .w").forEach(w=>{let f=parseFloat(getComputedStyle(w).fontSize),n=0;const max=w.parentElement.clientWidth*0.92;
-  while(w.scrollWidth>max&&n++<20){f*=0.92;w.style.fontSize=f+"px"}})}
+/* coupure syllabique simple (règles du français) : entre deux consonnes doublées, VC-CV, ou V-CV ; au plus près du milieu */
+function hyphenAt(s){const V="AEIOUYÀÂÄÉÈÊËÎÏÔÖÙÛÜŸŒÆ",u=s.toUpperCase(),isV=c=>V.includes(c),keep=["CH","PH","TH","GN","BR","CR","DR","FR","GR","PR","TR","VR","BL","CL","FL","GL","PL"];
+  let best=Math.ceil(s.length/2),bd=99;
+  for(let i=2;i<=s.length-2;i++){const a=u[i-1],b=u[i],c=u[i+1]||"",p=u[i-2];let ok=false;
+    if(!isV(a)&&!isV(b)&&isV(p)&&isV(c)&&!keep.includes(a+b))ok=true;              // VC-CV (dont LL, SS…)
+    else if(isV(a)&&!isV(b)&&isV(c))ok=true;                                          // V-CV
+    else if(!isV(a)&&!isV(b)&&isV(p)&&keep.includes(b+c))ok=true;                     // VC-CCV
+    else if(isV(a)&&keep.includes(b+c)&&isV(u[i+2]||""))ok=true;                       // V-CCV (télé-phone)
+    if(ok){const d=Math.abs(i-s.length/2);if(d<bd){bd=d;best=i}}}
+  return best}
+function fitWords(){root.querySelectorAll(".card .w").forEach(w=>{let f=parseFloat(getComputedStyle(w).fontSize),n=0;const base=f,max=w.parentElement.clientWidth*0.92;
+  while(w.scrollWidth>max&&n++<20){f*=0.92;w.style.fontSize=f+"px"}
+  /* mot long : plutôt que de le rendre minuscule sur la télé, on le coupe en deux lignes avec un trait d'union */
+  const txt=w.textContent;
+  if(f<base*0.66&&txt.length>=9&&!txt.includes("\u00ad")&&!txt.includes(" ")){
+    const cut=hyphenAt(txt);w.textContent=txt.slice(0,cut)+"\u00ad"+txt.slice(cut);
+    w.style.whiteSpace="normal";w.style.hyphens="manual";w.style.lineHeight="1.02";w.style.overflowWrap="normal";
+    f=base*0.8;w.style.fontSize=f+"px";n=0;const maxH=w.parentElement.clientHeight*0.86;
+    while((w.scrollWidth>max||w.scrollHeight>maxH)&&n++<20){f*=0.93;w.style.fontSize=f+"px"}
+  }})}
 function liveBits(){
   const pub=E.view().pub,c=$("#count");
   if(c&&pub.until)c.textContent=Math.ceil(pub.until/1000);

@@ -12,7 +12,7 @@
 
   const DEFAULT_CONFIG = {
     mission: "m1", difficulty: "normale", duration: "normale", roleMode: "auto", voteMode: "chef",
-    maxPlayers: 8, sound: true, music: true, volume: 70, anim: true
+    maxPlayers: 8, sound: true, music: true, volume: 70, anim: true, narrator: true, voice: "m", voiceRate: 1
   };
   const DIFF = {
     facile: { name: "Facile", integ: 100, temps: 2, dmg: 0.7, chk: 0.15, att: 4, ev: 0.7 },
@@ -75,6 +75,7 @@
   const COLORS = ["#38bdf8", "#f472b6", "#facc15", "#4ade80", "#a78bfa", "#fb923c", "#22d3ee", "#f87171"];
   const AVATARS = ["🦅", "🐺", "🦊", "🐻", "🦉", "🐍", "🦂", "🐆", "🦬", "🐉", "🌙", "☀️", "⭐", "🔥", "❄️", "⚡"];
   const MIN_PLAYERS = 2;
+  const GATE_MS = 21000;   // composition (7 chevrons), jaillissement du vortex, voyage
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   function clean(s, max) { return String(s == null ? "" : s).replace(/[\u0000-\u001f\u007f<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max); }
@@ -124,7 +125,17 @@
     }
     pick(v) { if (Array.isArray(v)) return v.find(x => this.cond(x.if)) || null; return v == null ? null : v; }
     txt(v) { const x = this.pick(v); return x == null ? "" : typeof x === "string" ? x : (x.text || ""); }
-    remain(now) { const s = this.st.step; if (!s || !s.until) return 0; return Math.max(0, s.until - (this.st.paused ? this.st.pauseAt : now)); }
+    remain(now) { const s = this.st.step; if (!s || !s.until) return 0; let ref = this.st.paused ? this.st.pauseAt : now; if (s.heldAt) ref = Math.min(ref, s.heldAt); return Math.max(0, s.until - ref); }
+    /* Pendant que l'animateur parle, le chrono de l'étape est figé (les joueurs peuvent toujours se déclarer prêts). */
+    hold(now) {
+      const s = this.st.step; if (!s || s.heldAt || !s.until || !["roles", "briefing", "narr", "vote", "puzzle", "outcome", "event"].includes(s.kind)) return false;
+      s.heldAt = this.st.paused ? this.st.pauseAt : now; this.bump(); return true;
+    }
+    unhold(now) {
+      const s = this.st.step; if (!s || !s.heldAt) return false;
+      const ref = this.st.paused ? this.st.pauseAt : now, d = Math.max(0, ref - s.heldAt);
+      s.until += d; if (s.minAt) s.minAt += d; delete s.heldAt; this.bump(); return true;
+    }
 
     /* ---------- configuration et joueurs ---------- */
     applyConfig(c) {
@@ -136,6 +147,8 @@
       if (!["chef", "majorite"].includes(C.voteMode)) C.voteMode = "chef";
       C.maxPlayers = clamp(Math.round(+C.maxPlayers || 8), 2, 8);
       C.volume = clamp(Math.round(+C.volume || 0), 0, 100);
+      C.narrator = C.narrator !== false; if (!["m", "f"].includes(C.voice)) C.voice = "m";
+      C.voiceRate = [0.85, 1, 1.15].includes(+C.voiceRate) ? +C.voiceRate : 1;
       this.bump();
     }
     join(pid, m, now) {
@@ -212,7 +225,7 @@
     resume(now) {
       const S = this.st; if (!S.paused) return false;
       const d = Math.max(0, now - S.pauseAt);
-      if (S.step) { if (S.step.until) S.step.until += d; if (S.step.minAt) S.step.minAt += d; }
+      if (S.step) { if (S.step.until) S.step.until += d; if (S.step.minAt) S.step.minAt += d; if (S.step.heldAt) S.step.heldAt += d; }
       S.paused = false; S.pauseWhy = ""; this.bump(); return true;
     }
     /* ---------- messages des téléphones ---------- */
@@ -259,7 +272,8 @@
     tick(now) {
       const S = this.st; if (S.paused || !S.step) return;
       const s = S.step;
-      if (s.until && now >= s.until) return this.advance(now, true);
+      if (s.heldAt && now - s.heldAt > 120000) this.unhold(now);      // sécurité : jamais plus de 2 minutes de chrono figé
+      if (s.until && !s.heldAt && now >= s.until) return this.advance(now, true);
       this.checkAll(now);
     }
     checkAll(now) {
@@ -273,7 +287,7 @@
       const S = this.st, s = S.step; if (!s) return false;
       switch (s.kind) {
         case "roles": S.phase = "briefing"; S.ready = {}; S.equip = S.equip || "kit"; S.step = { kind: "briefing", until: now + this.dur().brief, len: this.dur().brief, minAt: now + 5000 }; break;
-        case "briefing": this.applyEquip(); S.phase = "gate"; S.ready = {}; S.step = { kind: "gate", until: now + 13000, len: 13000}; break;
+        case "briefing": this.applyEquip(); S.phase = "gate"; S.ready = {}; S.step = { kind: "gate", until: now + GATE_MS, len: GATE_MS }; break;
         case "gate": S.phase = "scene"; this.enterScene(this.M().startScene, now); break;
         case "narr": this.afterNarr(now); break;
         case "vote": this.closeVote(now); break;
@@ -544,7 +558,7 @@
     }
     publicStep(now) {
       const S = this.st, s = S.step; if (!s) return null;
-      const out = { kind: s.kind, remain: this.remain(now), len: s.len || 0 };
+      const out = { kind: s.kind, remain: this.remain(now), len: s.len || 0, held: !!s.heldAt };
       const sc = this.sc();
       if (s.kind === "vote") {
         out.choices = s.choices.map(id => { const c = sc.choices.find(x => x.id === id); return { id, label: c.label, desc: c.desc || "", tags: this.tags(c) }; });
@@ -598,7 +612,7 @@
         phase: S.phase, paused: S.paused, pauseWhy: S.pauseWhy, cfg: { roleMode: S.config.roleMode, voteMode: S.config.voteMode },
         me: { id: p.id, name: p.name, avatar: p.avatar, color: p.color, want: p.want, role: p.role, roleName: r ? r.name : "", roleIcon: r ? r.icon : "", roleColor: r ? r.color : "", roleDesc: r ? r.desc : "", bases: r ? r.bases : [], ready: !!S.ready[pid] },
         team: this.team().map(t => ({ name: t.name, avatar: t.avatar, color: t.color, online: t.online, roleName: t.roleName, roleIcon: t.roleIcon, me: t.id === pid })),
-        mission: m ? { code: m.code, name: m.name } : null, res: S.res, remain: this.remain(now), len: S.step && S.step.len || 0
+        mission: m ? { code: m.code, name: m.name } : null, res: S.res, remain: this.remain(now), len: S.step && S.step.len || 0, held: !!(S.step && S.step.heldAt)
       };
       if (r) v.me.powers = r.powers.map(pw => ({ id: pw, name: POWERS[pw].name, icon: POWERS[pw].icon, desc: POWERS[pw].desc, left: p.charges ? p.charges[pw] : 0, steps: POWERS[pw].steps, usedHere: !!S.powerUse[pid + ":" + pw] }));
       if (S.phase === "roles" && m) v.roleBrief = m.roleBrief ? this.txt(m.roleBrief[r.bases[0]]) || "" : "";
@@ -668,5 +682,5 @@
     return errs;
   }
 
-  return { Game, ROLES, POWERS, BASES, SLOTS, EQUIP, RES, RES_MAX, ENDINGS, DIFF, DUR, AVATARS, DEFAULT_CONFIG, MIN_PLAYERS, newProgress, applyProgress, checkMission, RANK };
+  return { GATE_MS, Game, ROLES, POWERS, BASES, SLOTS, EQUIP, RES, RES_MAX, ENDINGS, DIFF, DUR, AVATARS, DEFAULT_CONFIG, MIN_PLAYERS, newProgress, applyProgress, checkMission, RANK };
 });

@@ -86,7 +86,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .bust{color:var(--red);font-weight:700}
 
 /* cricket */
-.cricket{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.cricket{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;table-layout:fixed}
+.cricket td.st{display:table-cell;text-align:center}
 .cwrap{overflow-x:auto}
 .cricket th,.cricket td{border-bottom:1px solid var(--line);padding:6px 4px;text-align:center}
 .cricket th{font-weight:700;font-size:15px;white-space:nowrap;max-width:9em;overflow:hidden;text-overflow:ellipsis}
@@ -134,11 +135,18 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .darts{display:flex;gap:8px;min-height:44px}
 .darts span{flex:1;border:1px dashed var(--line);border-radius:10px;display:grid;place-items:center;font-family:var(--f-num);font-weight:800;font-size:24px;color:var(--muted)}
 .darts span.f{border-style:solid;color:var(--sisal)}
+.darts span{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+@media (max-width:380px){.darts span{font-size:16px}.pad{padding:10px}.nkeys .k{font-size:20px}.tkeys .k{font-size:22px}body{padding-left:10px;padding-right:10px}.board{gap:6px}.pl{padding:8px}}
+html,body{max-width:100%;overflow-x:hidden}
+.pad{grid-template-columns:minmax(0,1fr)}
+.keys,.mult,.quick{grid-template-columns:repeat(3,minmax(0,1fr))}.quick{grid-template-columns:repeat(5,minmax(0,1fr))}.tkeys{grid-template-columns:repeat(4,minmax(0,1fr))}.nkeys{grid-template-columns:repeat(5,minmax(0,1fr))}.mult.tabs{grid-template-columns:repeat(2,minmax(0,1fr))}
+.tkeys .k{font-size:clamp(18px,6vw,26px);overflow:hidden}.k{min-width:0}
 .row{display:flex;gap:8px;flex-wrap:wrap}
 .row>*{flex:1}
 .err{color:var(--red);font-weight:600;min-height:1.2em;font-size:14px}
 
-.layout{display:grid;gap:16px}
+.layout{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+.layout>*,.game,.board{min-width:0}
 /* vue TV */
 body.tv .pad{display:none}
 body.tv.padon .layout{grid-template-columns:minmax(0,1fr) 380px}
@@ -152,6 +160,35 @@ body.tv .mk,body.tv .cricket td.tg{font-size:clamp(28px,3.4vw,56px)}
 body.tv .cricket tr.pts td{font-size:clamp(34px,4vw,64px)}
 body.tv .cricket th{font-size:clamp(15px,1.6vw,26px)}
 body.tv .meta{font-size:clamp(13px,1.2vw,18px)}
+/* télé en 960×540 (affichage réel de la plupart des téléviseurs Android) : tout doit tenir sans défilement */
+@media (max-height:800px){
+  body.tv{padding-block:8px}
+  body.tv .top{margin-bottom:6px}
+  body.tv .brand{font-size:22px}
+  body.tv .game{gap:8px}
+  body.tv .cricket th,body.tv .cricket td{padding:1px 4px}
+  body.tv .mk,body.tv .cricket td.tg{font-size:clamp(18px,6.2vh,56px)}
+  body.tv .cricket tr.pts td{font-size:clamp(20px,6.4vh,64px)}
+  body.tv .cricket th{font-size:clamp(13px,3vh,26px)}
+  body.tv .cricket td.st{font-size:12px;padding:0 4px}
+  body.tv .big,body.tv .target{font-size:clamp(48px,min(9vw,17vh),160px)}
+  body.tv .pl{padding:10px;gap:4px}
+  body.tv.padon .layout{grid-template-columns:minmax(0,1fr) 330px}
+  body.tv.padon .board{grid-template-columns:repeat(min(var(--n),2),minmax(0,1fr))}
+  body.tv.padon .big,body.tv.padon .target{font-size:clamp(40px,min(6vw,12vh),120px)}
+  body.tv .pad{padding:8px;gap:5px}
+  body.tv .pad .k{padding:6px 0;font-size:20px}
+  body.tv .pad .nkeys .k{padding:4px 0;font-size:17px}
+  body.tv .pad .mult button{padding:5px 0;font-size:14px}
+  body.tv .pad .tabs button{font-size:12px}
+  body.tv .pad .darts{min-height:30px}
+  body.tv .pad .darts span{font-size:15px}
+  body.tv .pad .screen{font-size:34px;min-height:44px;padding:0 10px}
+  body.tv .pad .quick button{padding:4px 0;font-size:13px}
+  body.tv .pad .padhead .who{font-size:16px}
+  body.tv .pad .foot .ghost{padding:5px 8px;font-size:13px}
+  body.tv .pad .err{min-height:0}
+}
 /* vue téléphone : tableau compact */
 body.phone .big,body.phone .target{font-size:40px}
 body.phone .board{grid-template-columns:repeat(min(var(--n),2),minmax(0,1fr))}
@@ -166,6 +203,40 @@ body.phone .pl{padding:10px}
 .win .row{justify-content:center}
 .win .row button{flex:0 1 auto;padding:12px 20px}
 .foot{display:flex;gap:8px;flex-wrap:wrap}
+/* volée en cours, affichée en direct pendant la saisie */
+.dts{display:flex;gap:6px;flex-wrap:wrap;min-height:0}
+.dts i{font-style:normal;font-family:var(--f-num);font-weight:800;font-size:15px;padding:1px 8px;border-radius:6px;background:var(--red);color:var(--sisal);font-variant-numeric:tabular-nums}
+.big.live{color:var(--red);transform-origin:left center;animation:livep .45s ease-out}
+@keyframes livep{0%{transform:scale(1.08)}100%{transform:none}}
+.game{align-content:start}
+.meta .livev{color:var(--red);font-family:var(--f-num);font-size:18px;letter-spacing:.04em}
+body.tv .dts i{font-size:clamp(15px,1.8vw,30px)}
+body.tv .meta .livev{font-size:clamp(18px,2vw,32px)}
+.cricket td.pend .mk{color:var(--red)}
+/* 5 à 8 joueurs */
+.counts.n8 button{padding:8px 0;font-size:22px;min-width:0}
+.board.many{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:8px}
+.board.many .pl{padding:8px;gap:3px}
+.board.many .st{display:none}
+body.tv .board.many .big,body.tv .board.many .target{font-size:clamp(40px,min(7.5vw,14vh),140px)}
+body.tv .board.many .pl .nm{font-size:clamp(15px,1.6vw,28px)}
+body.tv .board.many .finish{font-size:clamp(15px,1.6vw,28px)}
+body.tv.padon .board.many .big,body.tv.padon .board.many .target{font-size:clamp(28px,min(3.6vw,9vh),90px)}
+body.tv.padon .board.many .pl .nm,body.tv.padon .board.many .finish,body.tv.padon .board.many .last{font-size:clamp(12px,1.2vw,20px)}
+body.tv .board.many .dts i{font-size:clamp(12px,1.3vw,22px)}
+body.phone .board.many .big,body.phone .board.many .target{font-size:26px}
+body.phone .board.many .pl .nm{font-size:12px;gap:4px}
+body.phone .board.many .last,body.phone .board.many .finish{font-size:11px}
+body.phone .board.many .dts i{font-size:11px;padding:0 4px}
+body.phone .board.many .pl.cur .nm::before{display:none}
+.cricket.many th{font-size:12px}
+.cricket.many .mk,.cricket.many td.tg{font-size:20px}
+.cricket.many tr.pts td{font-size:22px}
+.cricket.many td.st{font-size:10px;white-space:normal}
+body.tv .cricket.many th{font-size:clamp(12px,1.4vw,24px)}
+body.tv .cricket.many .mk,body.tv .cricket.many td.tg{font-size:clamp(16px,min(3vw,5.6vh),48px)}
+body.tv .cricket.many tr.pts td{font-size:clamp(18px,min(3.2vw,6vh),52px)}
+body.tv.padon .cricket.many th{font-size:12px}
 </style>
 </head>
 <body>
@@ -215,6 +286,7 @@ let x01Mode=store.get("oche.x01mode","darts");
 const dv=t=>t==="M"?0:({S:1,D:2,T:3})[t[0]]*(+t.slice(1));
 const dl=t=>t==="M"?"—":t==="S25"?"25":t==="D25"?"Bull":t;
 let errMsg="";
+let askDbl=null;       // total saisi qui termine la partie en « sortie double » : on demande confirmation
 let room=null;
 
 /* ---------- moteur de jeu ---------- */
@@ -229,7 +301,11 @@ function compute(g){
     if(winner!==null)return;
     const pi=i%n,p=P[pi]; p.visits++;
     if(md.kind==="x01"){
-      if(v>p.rem){p.busts++;p.last={bust:true,v};}
+      let val=v,bust=false;
+      if(typeof v==="string"&&v[0]==="x"){val=+v.slice(1);bust=true}else val=+v;   // "x60" : volée annulée (fin sans double)
+      if(!bust&&(val>p.rem||(g.dbl&&p.rem-val===1)))bust=true;                      // sortie double : il faut finir exactement, jamais laisser 1
+      v=val;
+      if(bust){p.busts++;p.last={bust:true,v};}
       else{p.rem-=v;p.scored+=v;p.best=Math.max(p.best,v);if(v>=100)p.ton++;if(v===180)p.max++;p.last={v};if(p.rem===0)winner=pi;}
     }else if(md.kind==="cricket"){
       const list=String(v).split(",").filter(Boolean);
@@ -272,7 +348,8 @@ const FIN={};
 
 /* ---------- synchronisation (serveur intégré à l'appli TV) ---------- */
 function save(){store.set("oche.game",game)}
-function commit(){game&&(game.ts=Date.now());save();render();push()}
+function commit(){if(game){game.ts=Date.now();game.sq=(game.sq||0)+1;game.pend=darts.slice()}save();render();push()}
+function live(){if(game)commit();else render()}   // chaque fléchette part tout de suite vers la télé
 function share(){}
 function setPill(on){const pill=$("#link");pill.classList.toggle("on",on);
   pill.lastElementChild.textContent=IS_TV?"Téléphone : http://"+IP:(on?"Relié à la télé":"Télé injoignable")}
@@ -283,23 +360,25 @@ function push(){
 function adopt(g){
   if(g===null||g===undefined){if(game){game=null;draft="";darts=[];render()}return}
   if(typeof g!=="object"||!MODES[g.mode]||!Array.isArray(g.names)||!Array.isArray(g.v))return;
-  if(g.names.length<1||g.names.length>4)return;
-  game={id:String(g.id),mode:g.mode,names:g.names.map(x=>String(x).slice(0,20)),v:g.v.slice(0,600),ts:+g.ts||0};
-  draft="";darts=[];mult=1;errMsg="";save();render();
+  if(g.names.length<1||g.names.length>8)return;
+  if(game&&g.id===game.id&&(+g.sq||0)<=(game.sq||0))return;          // état plus ancien que ce qu'on a déjà saisi ici : on l'ignore
+  game={id:String(g.id),mode:g.mode,names:g.names.map(x=>String(x).slice(0,20)),v:g.v.slice(0,600).map(x=>typeof x==="string"&&/^x\d{1,3}$/.test(x)?x:x),ts:+g.ts||0,dbl:!!g.dbl,sq:+g.sq||0,pend:[]};askDbl=null;
+  const pd=Array.isArray(g.pend)?g.pend.filter(t=>typeof t==="string"&&/^(M|[SDT](?:[1-9]|1\d|20|25))$/.test(t)).slice(0,3):[];game.pend=pd;
+  draft="";darts=pd.slice();mult=1;errMsg="";save();render();
 }
 async function poll(){
   try{const r=await fetch("/state",{cache:"no-store"});const d=await r.json();setPill(true);
     if(d.rev>rev){rev=d.rev;adopt(d.d&&d.d.g)}}
   catch(e){setPill(false)}
-  setTimeout(poll,700);
+  setTimeout(poll,400);
 }
 
 /* ---------- actions ---------- */
-function newGame(mode,names){
-  game={id:Math.random().toString(36).slice(2,8),mode,names,v:[],ts:0};
+function newGame(mode,names,dbl){
+  game={id:Math.random().toString(36).slice(2,8),mode,names,v:[],ts:0,dbl:!!dbl&&MODES[mode].kind==="x01"};askDbl=null;
   draft="";darts=[];mult=1;errMsg="";commit();
 }
-function addVisit(v){if(!game)return;const c=compute(game);if(c.winner!==null)return;game.v.push(v);draft="";darts=[];mult=1;errMsg="";commit()}
+function addVisit(v){if(!game)return;askDbl=null;const c=compute(game);if(c.winner!==null)return;game.v.push(v);draft="";darts=[];mult=1;errMsg="";commit()}
 function undo(){if(!game||!game.v.length)return;game.v.pop();draft="";darts=[];errMsg="";commit()}
 function quit(){game=null;store.set("oche.game",null);draft="";darts=[];render();push()}
 
@@ -325,11 +404,13 @@ function tvWait(){
   <p>Le téléphone doit être sur le même Wi-Fi que la télé.</p>
   <p><button class="ghost" id="tvsetup" type="button">Jouer avec la télécommande</button></p></div>`;
 }
-let setupMode=store.get("oche.mode","501"),setupN=store.get("oche.n",2),setupNames=store.get("oche.names",["Joueur 1","Joueur 2","Joueur 3","Joueur 4"]);
+const MAXP=8;
+let setupDbl=store.get("oche.dbl",false),setupMode=store.get("oche.mode","501"),setupN=store.get("oche.n",2),setupNames=store.get("oche.names",[]);if(!Array.isArray(setupNames))setupNames=[];if(!(setupN>=1&&setupN<=MAXP))setupN=2;
 function setupHTML(){
   return `<form class="setup" id="setup"><h2>Nouvelle partie</h2>
   <div><div class="lbl">Jeu</div><div class="choices">${Object.entries(MODES).map(([k,m])=>`<button type="button" id="m-${k}" data-mode="${k}" aria-pressed="${k===setupMode}"><b>${m.label}</b><span>${m.sub}</span></button>`).join("")}</div></div>
-  <div><div class="lbl">Joueurs</div><div class="counts">${[1,2,3,4].map(i=>`<button type="button" id="n-${i}" data-n="${i}" aria-pressed="${i===setupN}">${i}</button>`).join("")}</div></div>
+  ${MODES[setupMode].kind==="x01"?`<div><div class="lbl">Fin de partie</div><div class="counts">${[[0,"Libre"],[1,"Sur un double"]].map(([d,l])=>`<button type="button" id="dbl-${d}" data-dbl="${d}" aria-pressed="${!!d===setupDbl}" style="font-size:20px">${l}</button>`).join("")}</div></div>`:""}
+  <div><div class="lbl">Joueurs</div><div class="counts n8">${[1,2,3,4,5,6,7,8].map(i=>`<button type="button" id="n-${i}" data-n="${i}" aria-pressed="${i===setupN}">${i}</button>`).join("")}</div></div>
   <div class="names">${Array.from({length:setupN},(_,i)=>`<input id="name-${i}" maxlength="20" value="${esc(setupNames[i]||"Joueur "+(i+1))}" aria-label="Nom du joueur ${i+1}">`).join("")}</div>
   <button class="go" id="start" type="submit">Lancer la partie</button></form>`;
 }
@@ -339,31 +420,36 @@ function bindSetup(){
   const f=$("#setup");if(!f)return;
   f.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{readNames();setupMode=b.dataset.mode;store.set("oche.mode",setupMode);render()});
   f.querySelectorAll("[data-n]").forEach(b=>b.onclick=()=>{readNames();setupN=+b.dataset.n;store.set("oche.n",setupN);render()});
-  f.onsubmit=e=>{e.preventDefault();readNames();newGame(setupMode,setupNames.slice(0,setupN))};
+  f.querySelectorAll("[data-dbl]").forEach(b=>b.onclick=()=>{readNames();setupDbl=b.dataset.dbl==="1";store.set("oche.dbl",setupDbl);render()});
+  f.onsubmit=e=>{e.preventDefault();readNames();newGame(setupMode,setupNames.slice(0,setupN),setupDbl)};
 }
 
 function marks(n){n=Math.min(n,3);return n===0?"":n===1?"/":n===2?"✕":"Ⓧ"}
 function gameHTML(){
-  const c=compute(game),md=c.md,n=game.names.length;
+  const c=compute(game),md=c.md,n=game.names.length,many=n>4;
+  const pd=c.cur!==null&&md.kind!=="clock"&&darts.length?darts:null;   // volée en cours de saisie
+  const pv=pd&&md.kind==="cricket"?compute(Object.assign({},game,{v:game.v.concat([pd.join(",")])})).P[c.cur]:null;
+  const chips=pd?`<div class="dts">${pd.map(t=>`<i>${md.kind==="cricket"?(t==="M"?"—":t.replace("S25","B").replace("D25","DB")):dl(t)}</i>`).join("")}</div>`:"";
   let board="";
   if(md.kind==="cricket"){
-    board=`<div class="cwrap"><table class="cricket"><thead><tr>${(()=>{const h=c.P.map((p,i)=>`<th class="${i===c.cur?"cur":""}">${esc(p.name)}</th>`);h.splice(n===1?1:Math.floor(n/2),0,"<th></th>");return h.join("")})()}</tr></thead><tbody>
+    board=`<div class="cwrap"><table class="cricket${many?" many":""}"><thead><tr>${(()=>{const h=c.P.map((p,i)=>`<th class="${i===c.cur?"cur":""}">${esc(p.name)}</th>`);h.splice(n===1?1:Math.floor(n/2),0,"<th></th>");return h.join("")})()}</tr></thead><tbody>
     ${CT.map(t=>{const dead=c.P.every(p=>p.marks[t]>=3);
-      const cells=c.P.map(p=>`<td><span class="mk ${p.marks[t]>=3?"m3":""}">${marks(p.marks[t])}</span></td>`);
+      const cells=c.P.map((p,i)=>{const mk=pv&&i===c.cur?pv.marks[t]:p.marks[t],nw=mk!==p.marks[t];return `<td class="${nw?"pend":""}"><span class="mk ${mk>=3?"m3":""}">${marks(mk)}</span></td>`});
       const tg=`<td class="tg">${t===25?"B":t}</td>`;
       const mid=n===1?1:Math.floor(n/2);cells.splice(mid,0,tg);
       return `<tr class="${dead?"dead":""}">${cells.join("")}</tr>`}).join("")}
-    <tr class="pts">${(()=>{const cells=c.P.map(p=>`<td>${p.pts}</td>`);cells.splice(n===1?1:Math.floor(n/2),0,"<td></td>");return cells.join("")})()}</tr>
+    <tr class="pts">${(()=>{const cells=c.P.map((p,i)=>`<td>${pv&&i===c.cur?pv.pts:p.pts}</td>`);cells.splice(n===1?1:Math.floor(n/2),0,"<td></td>");return cells.join("")})()}</tr>
     <tr>${(()=>{const cells=c.P.map(p=>`<td class="st" style="justify-content:center">MPR ${p.visits?(p.cmarks/p.visits).toFixed(2):"–"}</td>`);cells.splice(n===1?1:Math.floor(n/2),0,"<td></td>");return cells.join("")})()}</tr>
     </tbody></table></div>`;
   }else{
-    board=`<div class="board" style="--n:${n}">${c.P.map((p,i)=>{
+    board=`<div class="board${many?" many":""}" style="--n:${n}">${c.P.map((p,i)=>{
       const cur=i===c.cur;
       if(md.kind==="x01"){
         const avg=p.visits?(p.scored/p.visits).toFixed(1):"–";
-        const fin=cur&&FIN[p.rem]&&p.rem<=170?`<div class="finish">${FIN[p.rem]}</div>`:"";
+        const tot=cur&&pd?pd.reduce((a,x)=>a+dv(x),0):0,rem=p.rem-tot;
+        const fin=cur&&FIN[rem]&&rem<=170?`<div class="finish">${FIN[rem]}</div>`:"";
         const last=p.last?(p.last.bust?`<span class="bust">Bust (${p.last.v})</span>`:`Dernière volée : ${p.last.v}`):"";
-        return `<div class="pl ${cur?"cur":""}"><div class="nm">${esc(p.name)}</div><div class="big">${p.rem}</div>${fin}<div class="last">${last}</div>
+        return `<div class="pl ${cur?"cur":""}"><div class="nm">${esc(p.name)}</div><div class="big${tot?" live":""}">${rem}</div>${cur?chips:""}${fin}<div class="last">${last}</div>
         <div class="st"><span>Moy. <b>${avg}</b></span><span>Meilleure <b>${p.best||"–"}</b></span><span>100+ <b>${p.ton}</b></span>${p.max?`<span>180 <b>${p.max}</b></span>`:""}</div></div>`;
       }
       const t=Math.min(p.target,20);
@@ -373,7 +459,7 @@ function gameHTML(){
       <div class="st"><span>Réussite <b>${p.visits?Math.round(100*p.hits/(p.visits*3))+" %":"–"}</b></span></div></div>`;
     }).join("")}</div>`;
   }
-  const meta=`<div class="meta"><strong>${md.label}</strong><span>Tour ${c.round}</span>${c.cur!==null?`<span>Au tour de ${esc(game.names[c.cur])}</span>`:""}</div>`;
+  const meta=`<div class="meta"><strong>${md.label}</strong>${game.dbl?"<span>Sortie double</span>":""}<span>Tour ${c.round}</span>${c.cur!==null?`<span>Au tour de ${esc(game.names[c.cur])}</span>`:""}${pd&&md.kind==="cricket"?`<span class="livev">Volée en cours : ${pd.map(t=>t==="M"?"—":t.replace("S25","B").replace("D25","DB")).join(" · ")}</span>`:""}</div>`;
   const win=c.winner!==null?`<div class="win" role="dialog" aria-label="Fin de partie"><div><div class="t">Partie terminée</div><h2>${esc(game.names[c.winner])}</h2><p>remporte la partie en ${c.P[c.winner].visits} volée${c.P[c.winner].visits>1?"s":""}</p>
     <div class="row"><button class="go" id="again" type="button">Revanche</button><button class="ghost" id="undo2" type="button">Annuler la dernière volée</button><button class="ghost" id="menu" type="button">Autre jeu</button></div></div></div>`:"";
   return `<div class="layout"><section class="game">${meta}${board}</section>${padHTML(c)}</div>${win}`;
@@ -401,6 +487,7 @@ function padHTML(c){
     <div class="quick">${[26,41,45,60,81,85,100,121,140,180].map(q=>`<button type="button" id="q-${q}" data-q="${q}">${q}</button>`).join("")}</div>
     <div class="keys">${[7,8,9,4,5,6,1,2,3].map(k=>`<button class="k" type="button" id="k-${k}" data-k="${k}">${k}</button>`).join("")}
     <button class="k del" type="button" id="k-del" aria-label="Effacer">⌫</button><button class="k" type="button" id="k-0" data-k="0">0</button><button class="k ok" type="button" id="k-ok">OK</button></div>`;
+    if(askDbl!==null)body=`<div class="screen">${askDbl}</div><div class="lbl" style="margin:0">Dernière fléchette sur un double (ou le bull) ?</div><div class="row"><button class="k ok" type="button" id="dq-yes">Oui, partie gagnée</button><button class="k del" type="button" id="dq-no">Non : bust</button></div>`;
     body=tabs+body;
     }
   }else if(md.kind==="cricket"){
@@ -423,29 +510,32 @@ function bindGame(){
   const on=(id,f)=>{const el=document.getElementById(id);if(el)el.onclick=f};
   on("undo",undo);on("undo2",undo);
   on("quit",()=>{if(!confirmQuit){confirmQuit=true;$("#quit").textContent="Confirmer : terminer";setTimeout(()=>{confirmQuit=false;const q=$("#quit");if(q)q.textContent="Terminer la partie"},4000);return}confirmQuit=false;quit()});
-  on("again",()=>newGame(game.mode,game.names));
+  on("again",()=>newGame(game.mode,game.names,game.dbl));
   on("menu",quit);
   app.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>{if(draft.length<3){draft=(draft+b.dataset.k).replace(/^0+(?=\d)/,"");errMsg="";render()}});
   app.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>{draft=b.dataset.q;errMsg="";render()});
   on("k-del",()=>{draft=draft.slice(0,-1);render()});
   on("k-ok",submitX01);
-  app.querySelectorAll("[data-xm]").forEach(b=>b.onclick=()=>{x01Mode=b.dataset.xm;store.set("oche.x01mode",x01Mode);draft="";darts=[];mult=1;errMsg="";render()});
+  on("dq-yes",()=>{const v=askDbl;askDbl=null;addVisit(v)});
+  on("dq-no",()=>{const v=askDbl;askDbl=null;addVisit("x"+v)});
+  app.querySelectorAll("[data-xm]").forEach(b=>b.onclick=()=>{x01Mode=b.dataset.xm;store.set("oche.x01mode",x01Mode);draft="";const had=darts.length;darts=[];mult=1;errMsg="";had?live():render()});
   app.querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{
     if(darts.length>=3)return;const t=+b.dataset.d;
     if(t===0)darts.push("M");else{if(t===25&&mult===3){errMsg="Pas de triple sur le bull.";render();return}darts.push(({1:"S",2:"D",3:"T"})[mult]+t)}
     mult=1;errMsg="";
     const c=compute(game),p=c.P[c.cur],tot=darts.reduce((a,x)=>a+dv(x),0);
-    if(tot>=p.rem||darts.length===3)addVisit(tot);else render();
+    if(game.dbl&&tot===p.rem&&!/^D/.test(darts[darts.length-1]))addVisit("x"+tot);      // fini sans double : volée annulée
+    else if(tot>=p.rem||darts.length===3||(game.dbl&&p.rem-tot===1))addVisit(tot);else live();
   });
-  on("d-del",()=>{darts.pop();render()});
+  on("d-del",()=>{darts.pop();live()});
   on("d-ok",()=>{addVisit(darts.reduce((a,x)=>a+dv(x),0))});
   app.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{mult=+b.dataset.m;render()});
   app.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{
     if(darts.length>=3)return;const t=+b.dataset.t;
     if(t===0)darts.push("M");else{let m=mult;if(t===25&&m===3){errMsg="Pas de triple sur le bull.";render();return}darts.push(({1:"S",2:"D",3:"T"})[m]+t)}
-    mult=1;errMsg="";render();
+    mult=1;errMsg="";live();
   });
-  on("c-del",()=>{darts.pop();render()});
+  on("c-del",()=>{darts.pop();live()});
   on("c-ok",()=>{const d=darts.slice();while(d.length<3)d.push("M");addVisit(d.join(","))});
   app.querySelectorAll("[data-h]").forEach(b=>b.onclick=()=>addVisit(+b.dataset.h));
 }
@@ -453,6 +543,7 @@ function submitX01(){
   const v=draft===""?0:+draft;
   if(v>180){errMsg="Une volée ne dépasse pas 180.";render();return}
   if(IMPOSSIBLE.has(v)){errMsg=v+" est impossible en trois fléchettes.";render();return}
+  if(game.dbl){const c=compute(game),p=c.P[c.cur];if(v===p.rem){askDbl=v;render();return}}
   addVisit(v);
 }
 

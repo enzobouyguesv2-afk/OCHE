@@ -120,7 +120,8 @@ html.lowfx .gate .vortex .sp,html.lowfx .gate.idle .glyphs,html.lowfx .gate.idle
 #lobby .acts{position:absolute;left:590px;right:0;bottom:0;display:flex;gap:18px;align-items:center}
 #lobby .why{font-size:22px;color:var(--or);font-weight:700;max-width:420px;line-height:1.3}
 /* Réglages */
-#settings .list{position:absolute;top:140px;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr 1fr;gap:16px;align-content:start}
+#settings .list{position:absolute;top:126px;left:0;right:0;bottom:30px;display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start}
+#settings .row{padding:14px 26px}
 .row{display:flex;justify-content:space-between;align-items:center;padding:20px 28px;border-radius:20px;background:var(--panel);border:3px solid rgba(255,255,255,.06);font-size:28px;font-weight:700;outline:none;text-align:left}
 .row:focus{border-color:#fff;box-shadow:0 0 0 6px rgba(125,211,252,.3)}
 .row .val{display:flex;align-items:center;gap:16px;color:var(--gd);font-family:var(--disp);font-size:30px}
@@ -183,6 +184,7 @@ html.lowfx #left .narr p{animation:none}
 .ch .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .ch .tags i{font-style:normal;font-size:16px;font-weight:800;padding:3px 10px;border-radius:999px;background:rgba(233,180,76,.14);color:var(--gd)}
 .ch.lock{opacity:.4}
+.chl.many .ch{padding:10px 14px;margin-bottom:8px;gap:12px}.chl.many .ch .l{width:42px;height:42px;font-size:24px}.chl.many .ch b{font-size:23px}.chl.many .ch span{font-size:17px;margin-top:2px}.chl.many .ch .tags{margin-top:4px}
 .ch.win{border-color:var(--gd);background:rgba(233,180,76,.12)}
 .vcount{margin-top:auto;display:flex;align-items:center;justify-content:space-between;font-size:26px;font-weight:800;padding-top:10px}
 .vcount .ord{color:var(--gd)}
@@ -272,6 +274,49 @@ html.lowfx #left .narr p{animation:none}
 #toast{position:absolute;left:50%;bottom:150px;transform:translateX(-50%) translateY(30px);padding:18px 34px;border-radius:999px;background:#0f1a36;border:1px solid var(--line);font-size:28px;font-weight:700;opacity:0;transition:all .3s;z-index:30;pointer-events:none;max-width:1500px;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%)}
 .netbad{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:25;color:#fecaca;border-color:var(--rd)}
+/* ================= IMMERSION : animateur, cinématiques, ambiances ================= */
+#amb{position:absolute;inset:0;width:1920px;height:1080px;pointer-events:none}
+#cine{position:absolute;inset:0;width:1920px;height:1080px;pointer-events:none;z-index:14;opacity:0;transition:opacity .25s}
+#cine.on{opacity:1}
+#whiteout{position:absolute;inset:0;background:#e9f7ff;opacity:0;pointer-events:none;z-index:16;transition:opacity .35s}
+#whiteout.on{opacity:1;transition:opacity .12s}
+#alarm{position:absolute;inset:0;pointer-events:none;z-index:9;opacity:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(220,30,30,.55) 100%)}
+#alarm.on{animation:alarm .9s ease-in-out 4}
+#alarm.good{background:radial-gradient(ellipse at center,transparent 50%,rgba(74,222,128,.35) 100%)}
+@keyframes alarm{0%,100%{opacity:0}50%{opacity:1}}
+#stage.shake{animation:shake .5s linear 2}
+@keyframes shake{0%,100%{translate:0 0}20%{translate:-9px 4px}40%{translate:8px -5px}60%{translate:-6px 6px}80%{translate:5px -3px}}
+html.lowfx #stage.shake{animation:none}
+#mc{position:absolute;left:50%;bottom:6px;transform:translate(-50%,10px);width:1500px;height:44px;display:flex;align-items:center;gap:14px;padding:0 20px 0 8px;border-radius:999px;background:rgba(6,10,22,.92);border:1px solid rgba(233,180,76,.45);z-index:13;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none}
+#mc.on{opacity:1;transform:translate(-50%,0)}
+#mc .ins{width:34px;height:34px;flex:none}
+#mc .who{font-weight:900;font-size:17px;letter-spacing:.14em;color:var(--gd);white-space:nowrap;text-transform:uppercase}
+#mc .txt{flex:1;min-width:0;font-size:22px;color:#eef3ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#mc .wave{display:flex;gap:3px;align-items:center;height:26px;flex:none}
+#mc .wave i{width:4px;height:6px;border-radius:2px;background:var(--gd);animation:wv .9s ease-in-out infinite}
+#mc .wave i:nth-child(2){animation-delay:-.2s}#mc .wave i:nth-child(3){animation-delay:-.45s}#mc .wave i:nth-child(4){animation-delay:-.7s}#mc .wave i:nth-child(5){animation-delay:-.1s}
+@keyframes wv{50%{height:24px}}
+html.lowfx #mc .wave i{animation:none;height:14px}
+.speaking{color:#fff!important;text-shadow:0 0 22px rgba(233,180,76,.35)}
+#left .narr p{transition:color .4s,border-color .4s,padding .4s;border-left:4px solid transparent;padding-left:0}
+#left .narr p.speaking{border-left-color:var(--gd);padding-left:16px}
+#left .narr.reading p:not(.speaking){color:#9aa6c4}
+#brief .lines p{transition:color .4s;border-left:4px solid transparent}
+#brief .lines p.speaking{border-left-color:var(--gd);padding-left:14px}
+#arrive{position:absolute;left:150px;top:330px;z-index:12;pointer-events:none;opacity:0;transition:opacity .8s}
+#arrive.on{opacity:1}
+#arrive .c{font-family:var(--disp);font-size:120px;line-height:.9;letter-spacing:.06em;color:#fff;text-shadow:0 6px 40px rgba(0,0,0,.7)}
+#arrive .n{font-family:var(--disp);font-size:46px;color:var(--gd);margin-top:10px;text-shadow:0 4px 24px rgba(0,0,0,.7)}
+#arrive .d{font-size:26px;color:#d8e2f8;letter-spacing:.24em;text-transform:uppercase;margin-top:14px;text-shadow:0 2px 14px rgba(0,0,0,.8)}
+#arrive.on ~ #safe #left,#arrive.on ~ #safe #right{opacity:.12}
+#safe #left,#safe #right{transition:opacity .9s}
+/* nouvel écran de la Porte */
+#gatescr .gate{position:absolute;left:484px;top:16px;width:760px;height:760px;margin:0;transition:transform 3.4s cubic-bezier(.6,0,.9,.3),opacity 3.4s}
+#gatescr.zoom .gate{transform:scale(5.5);opacity:0}
+#gatescr .addr{position:absolute;left:0;right:0;top:800px;justify-content:center}
+#gatescr .cap{top:925px}
+#gatescr .gate .vortex{display:none}
+#gatescr.zoom .addr,#gatescr.zoom .cap{opacity:0;transition:opacity .6s}
 /* ================= TÉLÉPHONE ================= */
 html.ph,html.ph body{height:100%;overflow:hidden;overscroll-behavior:none}
 html.ph body{background:radial-gradient(ellipse at 50% -10%,#10284a 0,#04060d 65%) fixed;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
@@ -497,7 +542,7 @@ const Music = {
     const beat = this.mode === "tension" ? 0.28 : 0.42;
     if (!this.next || this.next < c.currentTime) this.next = c.currentTime + 0.05;
     while (this.next < c.currentTime + 0.3) {
-      const prog = this.PROG[this.mode] || this.PROG.base, ch = prog[Math.floor(this.step / 16) % prog.length], s = this.step % 16, t = this.next, v = Sfx.vol * 0.05;
+      const prog = this.PROG[this.mode] || this.PROG.base, ch = prog[Math.floor(this.step / 16) % prog.length], s = this.step % 16, t = this.next, v = Sfx.vol * 0.05 * (this.duck ? 0.35 : 1);
       if (s === 0) ch.forEach((n, i) => this.note(this.f(n), t, beat * 16, i ? "sine" : "triangle", v * 0.9));
       if (s === 0 || s === 8) this.note(this.f(ch[0] - 12), t, beat * 7, "sine", v * 2);
       if (this.mode === "explore" && (s === 3 || s === 11)) this.note(this.f(ch[2] + 12), t, beat * 3, "sine", v * 0.6);
@@ -595,6 +640,186 @@ const Art = {
 };
 
 /* ========================================================================================
+   ANIMATEUR — « Commandant Delmas », salle de contrôle (personnage original).
+   Voix de la télé (Android) si disponible, sinon synthèse du navigateur ; toujours sous-titré.
+   Tant qu'il lit, le chrono de l'étape est figé (le jeu ne presse pas les joueurs pendant la lecture).
+   ======================================================================================== */
+const Narr = {
+  q: [], cur: null, on: true, voice: "m", rate: 1, timer: 0, seq: 0, host: false, said: [],
+  init() {
+    this.host = !!(window.Android && Android.speak);
+    window.BTS_onSpeechEnd = () => { if (this.cur && this.cur.via === "host") this.done(this.cur); };
+  },
+  name() { return this.voice === "f" ? "Commandante Delmas" : "Commandant Delmas"; },
+  /* items : texte, ou {text, el:()=>Element, hold, sfx} ; flush : coupe ce qui est en cours */
+  say(items, opts) {
+    opts = opts || {};
+    if (!this.on) return;
+    if (!Array.isArray(items)) items = [items];
+    if (opts.flush) this.stop(true);
+    const list = items.filter(Boolean).map(x => typeof x === "string" ? { text: x } : x).filter(x => x.text);
+    list.forEach(x => { x.hold = opts.hold !== false && x.hold !== false; x.tag = opts.tag || ""; this.q.push(x); });
+    this.pump();
+  },
+  speaking() { return !!this.cur || this.q.length > 0; },
+  holding() { return (this.cur && this.cur.hold) || this.q.some(x => x.hold); },
+  pump() {
+    if (this.cur || !this.q.length) { TV.syncHold(); return; }
+    const it = this.cur = this.q.shift(); const id = ++this.seq; it.start = Date.now();
+    this.said.push(it.text); if (this.said.length > 400) this.said.shift();
+    const show = this.on || true;
+    if (show) { const p = $("#mc"); if (p) { p.querySelector(".who").textContent = this.name(); p.querySelector(".txt").textContent = it.text; p.classList.add("on"); } }
+    $$(".speaking").forEach(e => e.classList.remove("speaking"));
+    const el = it.el && it.el(); if (el) { el.classList.add("speaking"); const box = el.closest(".narr"); if (box) box.classList.add("reading"); }
+    if (it.sfx) Sfx.sg(it.sfx);
+    Music.duck = true; TV.syncHold();
+    const est = 700 + it.text.length * 64 / this.rate;
+    clearTimeout(this.timer);
+    if (!this.on || !Sfx.on || TV.game && TV.game.st.paused) { it.via = "silent"; this.timer = setTimeout(() => this.done(it), Math.min(est, 900 + it.text.length * 40)); return; }
+    try {
+      if (this.host) {
+        it.via = "host";
+        Android.speak(it.text, JSON.stringify({ rate: this.rate * 1.02, pitch: this.voice === "f" ? 1.0 : 0.86, volume: Math.max(0.15, Sfx.vol), persona: this.voice === "f" ? "lea" : "max" }));
+        this.timer = setTimeout(() => this.done(it), est * 1.7 + 3000);
+      } else if (window.speechSynthesis && window.SpeechSynthesisUtterance) {
+        it.via = "web"; const u = new SpeechSynthesisUtterance(it.text); u.lang = "fr-FR"; u.rate = this.rate; u.pitch = this.voice === "f" ? 1.05 : 0.8; u.volume = Math.max(0.15, Sfx.vol);
+        const vs = speechSynthesis.getVoices().filter(v => /^fr/i.test(v.lang)); if (vs.length) u.voice = vs.find(v => this.voice === "f" ? /female|femme|amelie|audrey|marie|julie/i.test(v.name) : /male|homme|thomas|paul|nicolas/i.test(v.name)) || vs[0];
+        u.onend = u.onerror = () => { if (this.cur === it) this.done(it); };
+        speechSynthesis.cancel(); speechSynthesis.speak(u);
+        this.timer = setTimeout(() => this.done(it), est * 1.5 + 2500);
+      } else { it.via = "silent"; this.timer = setTimeout(() => this.done(it), est); }
+    } catch (e) { it.via = "silent"; this.timer = setTimeout(() => this.done(it), est); }
+  },
+  done(it) {
+    if (this.cur !== it) return;
+    /* voix absente ou trop rapide : le sous-titre reste le temps de le lire */
+    const minMs = 500 + it.text.length * 42 / this.rate, el0 = Date.now() - (it.start || 0);
+    if (el0 < minMs && !it.late) { it.late = true; clearTimeout(this.timer); this.timer = setTimeout(() => this.done(it), minMs - el0); return; }
+    clearTimeout(this.timer); this.cur = null;
+    const el = it.el && it.el(); if (el) el.classList.remove("speaking");
+    if (!this.q.length) { const p = $("#mc"); if (p) p.classList.remove("on"); $$(".narr.reading").forEach(e => e.classList.remove("reading")); Music.duck = false; }
+    setTimeout(() => this.pump(), 260);
+  },
+  stop(keepBar) {
+    this.q = []; const it = this.cur; this.cur = null; clearTimeout(this.timer);
+    try { if (this.host) Android.stop(); else if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) { }
+    $$(".speaking").forEach(e => e.classList.remove("speaking")); $$(".narr.reading").forEach(e => e.classList.remove("reading"));
+    if (!keepBar) { const p = $("#mc"); if (p) p.classList.remove("on"); }
+    Music.duck = false; if (typeof TV !== "undefined" && TV.game) TV.syncHold();
+  },
+  pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+};
+const NUM = ["zéro", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix"];
+const LET_SAY = ["A", "B", "C", "D", "E", "F"];
+
+/* ========================================================================================
+   CINÉMATIQUES — dessinées en temps réel (aucune vidéo, aucun visuel emprunté) :
+   jaillissement du vortex, horizon des événements, voyage dans le vortex, ambiances par décor.
+   Les toiles sont en 960×540 (affichées en plein écran) pour rester fluides sur une télé.
+   ======================================================================================== */
+const Cine = {
+  W: 960, H: 540, mode: "", t0: 0, raf: 0, amb: "", parts: [], last: 0, gx: 480, gy: 198, gr: 140,
+  init() {
+    this.c = $("#cine"); this.x = this.c.getContext("2d"); this.c.width = this.W; this.c.height = this.H;
+    this.a = $("#amb"); this.ax = this.a.getContext("2d"); this.a.width = this.W; this.a.height = this.H;
+    const loop = t => { this.raf = requestAnimationFrame(loop); if (t - this.last < 30) return; this.last = t; try { this.frame(t); } catch (e) { } };
+    this.raf = requestAnimationFrame(loop);
+  },
+  low() { return document.documentElement.classList.contains("lowfx"); },
+  play(mode, dur) { this.mode = mode; this.t0 = performance.now(); this.dur = dur || 0; this.c.classList.toggle("on", !!mode); if (!mode) this.x.clearRect(0, 0, this.W, this.H); },
+  stop() { this.play(""); },
+  white(ms) { const w = $("#whiteout"); if (!w) return; w.classList.add("on"); setTimeout(() => w.classList.remove("on"), ms || 380); },
+  alarm(good) { const a = $("#alarm"); if (!a) return; a.classList.toggle("good", !!good); a.classList.remove("on"); void a.offsetWidth; a.classList.add("on"); if (!good && !this.low()) { const s = $("#stage"); s.classList.remove("shake"); void s.offsetWidth; s.classList.add("shake"); } },
+  ambient(env) {
+    if (this.amb === env) return; this.amb = env; this.parts = [];
+    const n = { jungle: 46, village: 40, temple: 50, ice: 120, tower: 110, domes: 110, outpost: 34, lab: 40, base: 22 }[env] || 0;
+    for (let i = 0; i < n; i++) this.parts.push(this.spawn(env, true));
+    if (!env) this.ax.clearRect(0, 0, this.W, this.H);
+  },
+  spawn(env, init) {
+    const r = Math.random, W = this.W, H = this.H;
+    if (env === "ice" || env === "tower" || env === "domes") return { x: r() * W * 1.2, y: init ? r() * H : -10, vx: -0.6 - r() * 0.9, vy: 0.8 + r() * 1.6, s: 1 + r() * 2.4, a: 0.4 + r() * 0.5, k: "snow" };
+    if (env === "outpost") return { x: r() * W, y: H * (0.45 + r() * 0.5), vx: (r() - 0.5) * 1.4, vy: -0.4 - r() * 1.2, s: 1 + r() * 2, a: 0, life: r() * 120, k: "spark" };
+    if (env === "jungle" || env === "village") return { x: r() * W, y: H * (0.35 + r() * 0.6), vx: 0, vy: 0, s: 1.4 + r() * 1.8, a: 0, ph: r() * 6.28, sp: 0.01 + r() * 0.02, k: "fly" };
+    return { x: r() * W, y: r() * H, vx: (r() - 0.5) * 0.25, vy: -0.08 - r() * 0.2, s: 0.8 + r() * 1.6, a: 0.15 + r() * 0.3, k: "dust" };
+  },
+  frame(t) {
+    const x = this.ax, W = this.W, H = this.H;
+    // ambiance
+    x.clearRect(0, 0, W, H);
+    if (this.amb && !this.low()) {
+      x.globalCompositeOperation = "lighter";
+      for (let i = 0; i < this.parts.length; i++) {
+        const p = this.parts[i];
+        if (p.k === "snow") { p.x += p.vx; p.y += p.vy; if (p.y > H + 10 || p.x < -10) this.parts[i] = this.spawn(this.amb); x.fillStyle = "rgba(235,245,255," + p.a + ")"; x.beginPath(); x.arc(p.x, p.y, p.s, 0, 6.28); x.fill(); }
+        else if (p.k === "fly") { p.ph += p.sp; p.x += Math.cos(p.ph * 1.3) * 0.5; p.y += Math.sin(p.ph) * 0.35; const a = 0.25 + 0.55 * Math.max(0, Math.sin(p.ph * 2.1)); const g = x.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.s * 5); g.addColorStop(0, "rgba(220,255,140," + a + ")"); g.addColorStop(1, "rgba(220,255,140,0)"); x.fillStyle = g; x.fillRect(p.x - p.s * 5, p.y - p.s * 5, p.s * 10, p.s * 10); }
+        else if (p.k === "spark") { p.life--; if (p.life < 0) { p.a = 1; p.life = 40 + Math.random() * 160; p.x = Math.random() * W; p.y = H * (0.45 + Math.random() * 0.5); } p.a *= 0.95; p.x += p.vx; p.y += p.vy; x.fillStyle = "rgba(150,230,255," + p.a + ")"; x.beginPath(); x.arc(p.x, p.y, p.s, 0, 6.28); x.fill(); }
+        else { p.x += p.vx; p.y += p.vy; if (p.y < -5) { p.y = H + 5; p.x = Math.random() * W; } x.fillStyle = (this.amb === "temple" ? "rgba(255,200,140," : "rgba(200,220,255,") + p.a + ")"; x.beginPath(); x.arc(p.x, p.y, p.s, 0, 6.28); x.fill(); }
+      }
+      if (this.amb === "outpost" && Math.random() < 0.004) { x.fillStyle = "rgba(170,140,255,.18)"; x.fillRect(0, 0, W, H); }
+      x.globalCompositeOperation = "source-over";
+    }
+    // cinématique
+    if (!this.mode) return;
+    const e = (performance.now() - this.t0) / 1000, c = this.x;
+    c.clearRect(0, 0, W, H);
+    if (this.mode === "kawoosh") this.kawoosh(c, e);
+    else if (this.mode === "horizon") this.horizon(c, e);
+    else if (this.mode === "travel") this.travel(c, e, false);
+    else if (this.mode === "return") this.travel(c, e, true);
+  },
+  blob(c, cx, cy, R, e, alpha) {
+    c.beginPath();
+    for (let i = 0; i <= 64; i++) { const a = i / 64 * 6.283, n = 1 + 0.09 * Math.sin(a * 5 + e * 9) + 0.06 * Math.sin(a * 9 - e * 13) + 0.04 * Math.sin(a * 13 + e * 5); const rx = R * n, px = cx + Math.cos(a) * rx, py = cy + Math.sin(a) * rx; if (i) c.lineTo(px, py); else c.moveTo(px, py); }
+    const g = c.createRadialGradient(cx, cy, 0, cx, cy, R * 1.1); g.addColorStop(0, "rgba(255,255,255," + alpha + ")"); g.addColorStop(0.35, "rgba(190,235,255," + alpha + ")"); g.addColorStop(0.8, "rgba(70,160,235," + alpha * 0.9 + ")"); g.addColorStop(1, "rgba(20,70,160,0)");
+    c.fillStyle = g; c.fill();
+  },
+  /* le vortex jaillit de l'anneau vers la caméra puis se rétracte */
+  kawoosh(c, e) {
+    const { gx, gy, gr } = this; c.globalCompositeOperation = "lighter";
+    const k = e < 0.45 ? e / 0.45 : e < 1.3 ? 1 - (e - 0.45) / 0.85 * 0.62 : 0.38;
+    const R = gr * (0.3 + 1.9 * Math.sin(Math.min(1, k) * 1.57));
+    this.blob(c, gx, gy + R * 0.08, R, e, 0.9);
+    this.blob(c, gx, gy, R * 0.6, e * 1.7, 0.6);
+    for (let i = 0; i < 26; i++) { const a = i / 26 * 6.283 + e, d = R * (0.8 + 0.5 * Math.sin(e * 7 + i)); c.fillStyle = "rgba(220,245,255,.5)"; c.beginPath(); c.arc(gx + Math.cos(a) * d, gy + Math.sin(a) * d, 2.5, 0, 6.28); c.fill(); }
+    c.globalCompositeOperation = "source-over";
+    if (e > 1.45) this.play("horizon");
+  },
+  /* horizon des événements : surface d'eau lumineuse, ondulante */
+  horizon(c, e) {
+    const { gx, gy, gr } = this, R = gr * 0.995;
+    c.save(); c.beginPath(); c.arc(gx, gy, R, 0, 6.283); c.clip();
+    const g = c.createRadialGradient(gx, gy - R * 0.2, 0, gx, gy, R); g.addColorStop(0, "#f2fbff"); g.addColorStop(0.35, "#8fd3ff"); g.addColorStop(0.75, "#2f86d6"); g.addColorStop(1, "#0a3a7c");
+    c.fillStyle = g; c.fillRect(gx - R, gy - R, R * 2, R * 2);
+    c.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 9; i++) { const rr = ((e * 38 + i * R / 9) % R); c.strokeStyle = "rgba(255,255,255," + (0.22 * (1 - rr / R)) + ")"; c.lineWidth = 3 + 2 * Math.sin(e * 3 + i); c.beginPath(); c.ellipse(gx + Math.sin(e + i) * 4, gy + Math.cos(e * 1.3 + i) * 3, rr, rr * 0.96, 0, 0, 6.283); c.stroke(); }
+    for (let i = 0; i < 4; i++) { const a = e * 0.25 + i * 1.57, rr = R * (0.55 + 0.1 * Math.sin(e + i)); c.strokeStyle = "rgba(255,255,255,.07)"; c.lineWidth = 10; c.beginPath(); c.arc(gx, gy, rr, a, a + 0.9); c.stroke(); }
+    const sh = c.createLinearGradient(gx - R, gy - R, gx + R, gy + R); sh.addColorStop(0, "rgba(255,255,255,.18)"); sh.addColorStop(0.5, "rgba(255,255,255,0)"); c.fillStyle = sh; c.fillRect(gx - R, gy - R, R * 2, R * 2);
+    c.restore(); c.globalCompositeOperation = "source-over";
+  },
+  /* voyage : anneaux et traînées de lumière qui se précipitent vers la caméra */
+  travel(c, e, back) {
+    const W = this.W, H = this.H, cx = W / 2 + Math.sin(e * 1.7) * 60, cy = H / 2 + Math.cos(e * 1.3) * 34;
+    c.fillStyle = back ? "#0a0718" : "#020814"; c.fillRect(0, 0, W, H);
+    c.globalCompositeOperation = "lighter";
+    const N = 34, sp = 0.85 + e * 0.25;
+    for (let i = 0; i < N; i++) {
+      const z = ((i / N) + e * sp) % 1, r = 18 / Math.max(0.02, 1 - z), a = Math.min(1, z * 1.6) * (1 - z) * 1.2;
+      const hue = back ? (24 + i * 3) : (195 + 25 * Math.sin(i + e * 2));
+      c.strokeStyle = "hsla(" + hue + ",90%," + (60 + 20 * Math.sin(i)) + "%," + a + ")"; c.lineWidth = 2 + 10 * z;
+      c.beginPath(); c.ellipse(cx + (W / 2 - cx) * z, cy + (H / 2 - cy) * z, r * 1.25, r, Math.sin(e + i) * 0.3, 0, 6.283); c.stroke();
+    }
+    for (let i = 0; i < 130; i++) {
+      const h1 = Math.sin(i * 12.9898) * 43758.5453, h2 = Math.sin(i * 78.233) * 12345.678, a = (h1 - Math.floor(h1)) * 6.283, z = ((h2 - Math.floor(h2)) + e * 1.6) % 1, d = 20 / Math.max(0.03, 1 - z), d2 = 20 / Math.max(0.03, 1 - Math.max(0, z - 0.06));
+      c.strokeStyle = back ? "rgba(255,190,120," + z * 0.8 + ")" : "rgba(200,240,255," + z * 0.8 + ")"; c.lineWidth = 1 + z * 2.5;
+      c.beginPath(); c.moveTo(cx + Math.cos(a) * d2, cy + Math.sin(a) * d2); c.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d); c.stroke();
+    }
+    const g = c.createRadialGradient(cx, cy, 0, cx, cy, 120); g.addColorStop(0, back ? "rgba(255,230,200,.9)" : "rgba(230,250,255,.9)"); g.addColorStop(1, "rgba(0,0,0,0)"); c.fillStyle = g; c.fillRect(cx - 120, cy - 120, 240, 240);
+    c.globalCompositeOperation = "source-over";
+  }
+};
+
+/* ========================================================================================
    TÉLÉ
    ======================================================================================== */
 const ENV_LABEL = { base: "Base", jungle: "Jungle", temple: "Temple", village: "Village", domes: "Village", ice: "Glace", tower: "Tour", outpost: "Avant-poste", lab: "Intérieur" };
@@ -602,7 +827,8 @@ const TV = {
   game: null, net: null, room: "", screen: "", lastSeq: -1, lastViews: {}, lastViewAt: 0, netState: "init", netLostAt: 0, built: {}, lastPhase: "", lastKind: "", prog: null,
   async boot() {
     document.documentElement.classList.add("tv");
-    document.body.innerHTML = '<div id="stage"><div id="bgart"></div><div class="safe" id="safe"></div><div id="ann"></div><div id="toast"></div></div>';
+    document.body.innerHTML = '<div id="stage"><div id="bgart"></div><canvas id="amb"></canvas><div id="arrive"></div><div class="safe" id="safe"></div><div id="alarm"></div><canvas id="cine"></canvas><div id="whiteout"></div><div id="ann"></div><div id="mc"><svg class="ins" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="#141c30" stroke="#e9b44c" stroke-width="2"/><circle cx="20" cy="20" r="11" fill="none" stroke="#7dd3fc" stroke-width="2.5"/><path d="M20 6l2.4 7.4H30l-6.1 4.4 2.3 7.3L20 20.7l-6.2 4.4 2.3-7.3L10 13.4h7.6z" fill="#e9b44c"/></svg><span class="who"></span><span class="txt"></span><span class="wave"><i></i><i></i><i></i><i></i><i></i></span></div><div id="toast"></div></div>';
+    Narr.init(); Cine.init();
     $("#stage").addEventListener("click", e => { const b = e.target.closest("[data-act]"); if (b) this.act(b.dataset.act, b); });
     this.fit(); addEventListener("resize", () => this.fit());
     try { await loadScript("/sg-engine.js"); await loadScript("/sg-missions.js"); await loadScript("/ia-qr.js"); }
@@ -620,7 +846,13 @@ const TV = {
     window.SG_TV = this;
   },
   fit() { const s = Math.min(innerWidth / 1920, innerHeight / 1080), st = $("#stage"); if (!st) return; st.style.transform = "translate(" + Math.round((innerWidth - 1920 * s) / 2) + "px," + Math.round((innerHeight - 1080 * s) / 2) + "px) scale(" + s + ")"; },
-  applyFx() { const C = this.game.st.config; document.documentElement.classList.toggle("lowfx", !C.anim || matchMedia("(prefers-reduced-motion: reduce)").matches); Sfx.on = !!C.sound; Sfx.vol = (C.volume == null ? 70 : C.volume) / 100; Music.on = !!C.music; },
+  applyFx() { const C = this.game.st.config; document.documentElement.classList.toggle("lowfx", !C.anim || matchMedia("(prefers-reduced-motion: reduce)").matches); Sfx.on = !!C.sound; Sfx.vol = (C.volume == null ? 70 : C.volume) / 100; Music.on = !!C.music; Narr.on = C.narrator !== false; Narr.voice = C.voice || "m"; Narr.rate = +C.voiceRate || 1; if (!Narr.on) Narr.stop(); },
+  /* le chrono de l'étape est figé tant que l'animateur lit */
+  syncHold() {
+    const g = this.game; if (!g || !g.st.step) return;
+    const want = Narr.holding() && this.screen === "game" && !g.st.paused && !$("#menu"), now = Date.now();
+    if (want && !g.st.step.heldAt) g.hold(now); else if (!want && g.st.step.heldAt) g.unhold(now);
+  },
   restoreOrNew() {
     const saved = store.get("sg_state", null);
     this.game = new SG.Game({ missions: SG_MISSIONS, prog: this.prog });
@@ -656,7 +888,7 @@ const TV = {
       if (m.type === "hello") {
         if (!r.ok) { this.net.send(pid, { type: r.reason === "pleine" ? "full" : r.reason === "en_cours" ? "busy" : "refused", reason: r.reason }); return; }
         const np = g.st.players[pid]; if (np && !np.key && typeof m.k === "string") np.key = m.k.slice(0, 40);
-        this.lastViews[pid] = ""; if (!before) Sfx.sg("vote");
+        this.lastViews[pid] = ""; if (!before) { Sfx.sg("vote"); if (this.screen === "lobby") Narr.say(Narr.pick(["Bienvenue, ", "Bienvenue dans l'équipe, ", "Recrue enregistrée : "]) + g.st.players[pid].name + ".", { hold: false }); }
       } else if (r.rejoin) { this.net.send(pid, { type: "rejoin" }); return; }
       if (m.mid) { const a = Object.assign({ type: "ack", mid: m.mid, for: m.type }, r); this.net.send(pid, a); }
       if (m.type === "vote" && r.ok) Sfx.sg("vote");
@@ -697,7 +929,16 @@ const TV = {
       if (S.phase === "lobby" && this.screen === "game") this.show("lobby");
       if (S.phase === "roles") Sfx.sg("secret");
       if (S.phase === "briefing") Sfx.sg("static");
-      if (S.phase === "ending") { const t = S.ending && S.ending.type; Sfx.sg(t === "critique" ? "endbad" : "end"); if (S.ending && S.ending.unlocks.length) this.saveProg(); this.saveProg(); }
+      if (S.phase === "ending") {
+        const E = S.ending, t = E && E.type; this.saveProg(); Narr.stop();
+        Cine.play(this.low() ? "" : "return"); Sfx.sg("whoosh");
+        Narr.say(t === "critique" && E.res.integrite <= 0 ? "Ici la base. Équipe de secours sur place. Nous vous ramenons." : Narr.pick(["Ici la base. Nous vous recevons. Fermeture du vortex.", "Équipe en approche. Bienvenue à la maison.", "Ici la base : réception confirmée."]), { hold: false });
+        clearTimeout(this.retT); this.retT = setTimeout(() => {
+          Cine.white(600); Cine.stop(); Sfx.sg(t === "critique" ? "endbad" : "end");
+          if (this.game.st.phase === "ending") Narr.say([SG.ENDINGS[t].name + ".", { text: E.title + ".", el: () => $("#end h1") }, { text: E.text, el: () => $("#end .txt") }, "Évaluation de la mission : " + E.grade + "."], { hold: false });
+        }, this.low() ? 600 : 4600);
+      }
+      if (S.phase === "lobby") { Narr.stop(); Cine.stop(); }
     }
     if (k !== this.lastKind || (S.step && S.step.until !== this.lastUntil)) {
       const was = this.lastKind; this.lastKind = k; this.lastUntil = S.step && S.step.until;
@@ -707,7 +948,8 @@ const TV = {
       if (k === "outcome") Sfx.sg(S.step.success === false ? "ko" : S.step.success ? "ok" : "open");
       if (k === "event") Sfx.sg(S.step.tone === "good" ? "ok" : "alarm");
     }
-    if (S.announce && S.announce.id !== this.lastAnn) { this.lastAnn = S.announce.id; this.announce(S.announce.icon + " " + S.announce.text); }
+    if (S.announce && S.announce.id !== this.lastAnn) { this.lastAnn = S.announce.id; this.announce(S.announce.icon + " " + S.announce.text); if (!Narr.speaking()) Narr.say(S.announce.text + ".", { hold: false }); }
+    this.narrate();
     const mus = S.paused ? "" : { lobby: "base", roles: "base", briefing: "base", gate: "", scene: S.res && S.res.menace >= 3 ? "tension" : "explore", ending: "base" }[S.phase] || "";
     Music.set(this.screen === "home" || this.screen === "missions" || this.screen === "lobby" ? (S.phase === "lobby" ? "base" : mus) : mus);
     // flash des jauges
@@ -715,7 +957,7 @@ const TV = {
   },
   announce(t) { const a = $("#ann"); if (!a) return; a.textContent = t; a.classList.add("on"); clearTimeout(this.annT); this.annT = setTimeout(() => a.classList.remove("on"), 3800); },
   /* ----- Écrans ----- */
-  bg(env) { if (this.curEnv === env) return; this.curEnv = env; $("#bgart").innerHTML = env ? Art.env(env) : ""; },
+  bg(env) { if (this.curEnv === env) return; this.curEnv = env; $("#bgart").innerHTML = env ? Art.env(env) : ""; Cine.ambient(env); },
   show(name) { this.screen = name; this.built = {}; $("#safe").innerHTML = ""; clearTimeout(this.gateT); this.gateRun = null; this.render(); const f = $("#safe .row, #safe .mcard") || $("#safe .tvbtn"); if (f && !$("#safe").contains(document.activeElement)) f.focus(); },
   region(id, key, html, parent) {
     let el = document.getElementById(id);
@@ -747,6 +989,7 @@ const TV = {
   inProgress() { const p = this.game.st.phase; return p !== "lobby" && p !== "ending"; },
   renderHome() {
     this.bg("");
+    if (!this.greeted) { this.greeted = true; setTimeout(() => { if (this.screen === "home") Narr.say("Ici la salle de contrôle. Bienvenue, équipe. La Porte vous attend.", { hold: false }); }, 1200); }
     const ip = this.inProgress(), M = SG_MISSIONS, g = this.game;
     this.build("home" + ip, '<div class="screen" id="home"><div class="gwrap">' + Art.gate("idle", "hg") + '</div><div class="side"><div class="logo" style="font-size:118px"><small>Une aventure coopérative</small><b>AU-DELÀ</b><b>DE LA PORTE</b></div>' +
       '<div class="tag">Franchissez l\'anneau, explorez des mondes inconnus et décidez ensemble. Chacun reçoit des informations secrètes sur son téléphone : seule l\'équipe entière peut réussir.</div>' +
@@ -798,7 +1041,10 @@ const TV = {
     ["volume", "Volume", () => [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100], v => v + " %"],
     ["music", "Musique d'ambiance", () => [true, false], v => v ? "Oui" : "Non"],
     ["sound", "Effets sonores", () => [true, false], v => v ? "Oui" : "Non"],
-    ["anim", "Animations", () => [true, false], v => v ? "Oui" : "Réduites"]
+    ["anim", "Animations", () => [true, false], v => v ? "Oui" : "Réduites"],
+    ["narrator", "Animateur (voix + sous-titres)", () => [true, false], v => v ? "Oui" : "Non"],
+    ["voice", "Voix de l'animateur", () => ["m", "f"], v => v === "m" ? "Commandant" : "Commandante"],
+    ["voiceRate", "Débit de parole", () => [0.85, 1, 1.15], v => v === 0.85 ? "Posé" : v === 1 ? "Normal" : "Rapide"]
   ],
   renderSettings() {
     this.bg("base");
@@ -806,8 +1052,8 @@ const TV = {
     if (this.built._ === key) return;
     const foc = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.row : null;
     this.build(key, '<div class="screen" id="settings"><div class="head"><h2>⚙ PARAMÈTRES</h2><button class="tvbtn gold" data-act="setdone">✔ TERMINÉ</button></div><div class="list">' +
-      this.SETROWS.map((r, i) => { const v = C[r[0]], lock = r[0] === "difficulty" && v === "expert" && !this.prog.expert; return '<button class="row" data-row="' + i + '" data-act="cyc"><div>' + esc(r[1]) + (r[4] ? '<small>' + esc(r[4]) + '</small>' : "") + '</div><div class="val"><i>◀</i>' + esc(r[3](v)) + (lock ? " 🔒" : "") + '<i>▶</i></div></button>'; }).join("") +
-      '</div><div class="hint">Flèches ◀ ▶ pour modifier · OK pour passer à la valeur suivante · Retour pour valider</div></div>');
+      this.SETROWS.map((r, i) => { const v = C[r[0]], lock = r[0] === "difficulty" && v === "expert" && !this.prog.expert; return '<button class="row" data-row="' + i + '" data-act="cyc"><div>' + esc(r[1]) + (r[4] ? '<small>' + esc(r[4]) + '</small>' : "") + '</div><div class="val">' + esc(r[3](v)) + (lock ? " 🔒" : "") + '<i>↻</i></div></button>'; }).join("") +
+      '</div><div class="hint">Flèches pour se déplacer · OK pour changer la valeur · Retour pour valider</div></div>');
     if (foc != null) { const f = $('.row[data-row="' + foc + '"]'); if (f) f.focus(); }
   },
   cycle(i, d) {
@@ -864,24 +1110,83 @@ const TV = {
     const k = v.equip + JSON.stringify(v.equipChoices) + JSON.stringify(v.team.map(t => t.ready));
     if (this.built.bq !== k) { this.built.bq = k; $("#bq").innerHTML = '<div class="kick" style="letter-spacing:.2em;font-size:20px;width:170px">Équipement emporté</div>' + Object.keys(SG.EQUIP).map(e => { const av = v.equipChoices.includes(e); return '<div class="it' + (v.equip === e ? " on" : "") + '" style="' + (av ? "" : "opacity:.2") + '"><i>' + SG.EQUIP[e].icon + '</i><div>' + esc(SG.EQUIP[e].name) + '<div style="font-size:18px;color:var(--mut);font-weight:600">' + esc(av ? SG.EQUIP[e].desc : "🔒 à débloquer") + '</div></div></div>'; }).join(""); $("#bf-ready").textContent = "Prêts : " + v.team.filter(t => t.ready).length + " / " + v.team.length; }
   },
+  /* ----- Ce que dit l'animateur, à chaque nouvelle étape ----- */
+  narrate() {
+    const g = this.game, S = g.st, k = S.step && S.step.kind;
+    const key = S.phase + ":" + (S.scene || "") + ":" + (S.visited ? S.visited.length : 0) + ":" + k + ":" + (k === "outcome" || k === "event" ? S.step.until : "");
+    if (key === this.narrKey) {
+      if (k === "puzzle" && S.step.tries.length > (this.tries || 0)) { this.tries = S.step.tries.length; const tr = S.step.tries[S.step.tries.length - 1]; Narr.say("Négatif. " + tr.fb + ". " + (S.step.attempts > 0 ? "Encore " + (NUM[S.step.attempts] || S.step.attempts) + " essai" + (S.step.attempts > 1 ? "s" : "") + "." : ""), { flush: true, hold: false }); }
+      return;
+    }
+    this.narrKey = key; this.tries = 0;
+    if (S.paused || this.screen !== "game") return;
+    const v = g.tvView(Date.now()), m = v.mission;
+    if (S.phase === "roles") {
+      Narr.say(["Ici la salle de contrôle. Votre équipe est constituée.", v.team.map(x => x.name + " : " + x.roleName).join(". ") + ".", "Lisez votre rôle sur votre téléphone, puis appuyez sur « Je suis prêt »."], { flush: true });
+    } else if (S.phase === "briefing") {
+      const B = m.briefing;
+      Narr.say([B.time.replace("—", ",") + "."].concat(B.lines.map((l, i) => ({ text: l, el: () => $$("#brief .lines p")[i] }))).concat(["Objectifs : " + B.objectives.join(" ; ") + ".", "Chef d'équipe, choisissez l'équipement sur votre téléphone. Quand tout le monde est prêt, nous ouvrons la Porte."]), { flush: true });
+    } else if (S.phase === "scene" && k === "narr") {
+      const sc = v.scene, items = [];
+      if (sc.n === 1) { this.arrival(m, sc); items.push("Arrivée sur " + m.code + "."); }
+      sc.text.forEach((p, i) => items.push({ text: p, el: () => $$("#narr p")[i] }));
+      if (sc.radio) items.push({ text: "Message radio : " + sc.radio, sfx: "static", el: () => $("#left .radio") });
+      items.push(sc.n <= 2 ? "Consultez vos téléphones : chacun a reçu des informations confidentielles. Partagez-les… ou gardez-les. Quand vous êtes prêts, appuyez sur « Je suis prêt »." : Narr.pick(["Vos carnets de terrain sont à jour.", "Nouvelles informations sur vos téléphones.", "Consultez vos téléphones."]));
+      Narr.say(items, { flush: true });
+    } else if (k === "vote") {
+      const s = v.step;
+      Narr.say([Narr.pick(["L'équipe doit décider.", "Moment de décision.", "À vous de trancher."])].concat(s.choices.map((c, i) => ({ text: "Option " + LET_SAY[i] + " : " + c.label + ".", el: () => $$("#right .ch")[i] }))).concat([Narr.pick(["Votez en secret sur vos téléphones.", "Le vote est secret. À vos téléphones.", "Votez sur vos téléphones."])]), { flush: true });
+    } else if (k === "puzzle") {
+      const P = v.step.puzzle; this.tries = P.tries.length;
+      Narr.say([{ text: "Énigme ! " + P.prompt, el: () => $("#right h2") }, "C'est à " + P.holder + " de saisir la réponse. Les indices sont répartis entre vous : partagez-les !"], { flush: true });
+    } else if (k === "outcome") {
+      const s = v.step;
+      Narr.say([s.label ? s.label + (s.success === true ? " : réussite !" : s.success === false ? " : échec." : ".") : "", { text: s.text, el: () => $("#right p") }].filter(Boolean), { flush: true });
+    } else if (k === "event") {
+      const s = v.step; Cine.alarm(s.tone === "good");
+      Narr.say([s.tone === "good" ? "Bonne nouvelle : " + s.title + "." : "Alerte ! " + s.title + " !", { text: s.text, el: () => $("#right p") }], { flush: true });
+    }
+  },
+  arrival(m, sc) {
+    const a = $("#arrive"); if (!a) return;
+    a.innerHTML = '<div class="c">' + esc(m.code) + '</div><div class="n">' + esc(m.name) + '</div><div class="d">' + esc(ENV_LABEL[sc.env] || "") + ' · arrivée de l\'équipe</div>';
+    a.classList.add("on"); clearTimeout(this.arrT); this.arrT = setTimeout(() => a.classList.remove("on"), 4800);
+  },
   renderGate() {
     this.bg("base");
-    if (!this.build("gate" + this.game.st.step.until, '<div class="screen" id="gatescr"><div class="cap" id="gcap">ACTIVATION DE LA PORTE</div>' + Art.gate("", "dg") + '<div class="addr">' + [0, 1, 2, 3, 4, 5, 6].map(i => '<div><svg viewBox="-20 -20 40 40">' + Art.glyph(this.game.st.mission.length * 11 + i * 5 + 1, "#ffcf8a", 3.4) + '</svg></div>').join("") + '</div></div>')) return;
-    const order = [1, 2, 3, 6, 7, 8, 0], gate = $("#gatescr .gate"), rem = this.game.remain(Date.now()), t0 = Math.max(0, 13000 - rem);
-    let i = Math.floor(Math.max(0, t0 - 600) / 1350);
-    const lockTo = n => { for (let k = 0; k < n && k < 7; k++) { const c = gate.querySelector('.chev[data-c="' + order[k] + '"]'); if (c) c.classList.add("on"); const a = $$("#gatescr .addr div")[k]; if (a) a.classList.add("on"); } };
-    lockTo(i);
-    const stepF = () => {
-      if (this.screen !== "game" || this.game.st.phase !== "gate" || !$("#gatescr")) return;
-      if (this.game.st.paused) { this.gateT = setTimeout(stepF, 300); return; }
-      if (i < 7) { gate.querySelector(".glyphs").style.transform = "rotate(" + ((i + 1) * 97) + "deg)"; Sfx.sg("rumble"); setTimeout(() => { lockTo(i + 1); Sfx.sg("clunk"); i++; $("#gcap").textContent = "CHEVRON " + i + " VERROUILLÉ"; this.gateT = setTimeout(stepF, 250); }, 1100); }
-      else { $("#gcap").textContent = "VORTEX ÉTABLI"; gate.classList.add("open", "burst"); Sfx.sg("whoosh"); }
+    const S = this.game.st, key = "gate" + S.step.until;
+    if (!this.build(key, '<div class="screen" id="gatescr"><div class="cap" id="gcap">SÉQUENCE DE COMPOSITION</div>' + Art.gate("", "dg") + '<div class="addr">' + [0, 1, 2, 3, 4, 5, 6].map(i => '<div><svg viewBox="-20 -20 40 40">' + Art.glyph(S.mission.length * 11 + i * 5 + 1, "#ffcf8a", 3.4) + '</svg></div>').join("") + '</div></div>')) return;
+    const order = [1, 2, 3, 6, 7, 8, 0], gate = $("#gatescr .gate"), fired = {};
+    this.gateRun = key; Cine.stop(); Narr.stop();
+    Cine.gx = 480; Cine.gy = 225; Cine.gr = 139;
+    const lock = n => { const c = gate.querySelector('.chev[data-c="' + order[n] + '"]'); if (c) c.classList.add("on"); const a = $$("#gatescr .addr div")[n]; if (a) a.classList.add("on"); };
+    const once = (k, f) => { if (!fired[k]) { fired[k] = 1; f(); } };
+    const step = () => {
+      if (this.gateRun !== key || this.game.st.phase !== "gate" || !$("#gatescr")) return;
+      if (!this.game.st.paused) {
+        const el = SG.GATE_MS - this.game.remain(Date.now()), late = el > 2500 && !fired.intro;
+        once("intro", () => { if (!late) Narr.say(Narr.pick(["Lancement de la séquence de composition.", "Séquence de composition engagée.", "Composition de l'adresse en cours."]), { hold: false }); });
+        for (let i = 0; i < 7; i++) {
+          const at = 1700 + i * 1250;
+          if (el >= at - 1050) once("r" + i, () => { gate.querySelector(".glyphs").style.transform = "rotate(" + ((i + 1) * 97) + "deg)"; if (el < at) Sfx.sg("rumble"); });
+          if (el >= at) once("c" + i, () => { lock(i); if (el < at + 600) { Sfx.sg("clunk"); Narr.say(i < 6 ? "Chevron " + NUM[i + 1] + ", enclenché." : "Chevron sept… verrouillé !", { hold: false, flush: true }); } $("#gcap").textContent = i < 6 ? "CHEVRON " + (i + 1) + " ENCLENCHÉ" : "CHEVRON 7 VERROUILLÉ"; });
+        }
+        if (el >= 10500) once("kw", () => { $("#gcap").textContent = "VORTEX ÉTABLI"; if (el < 12000) { Sfx.sg("whoosh"); Cine.play(this.low() ? "horizon" : "kawoosh"); } else Cine.play("horizon"); });
+        if (el >= 12600) once("go", () => Narr.say(Narr.pick(["Vortex stable. Équipe, en avant !", "Vortex établi. Bonne chance, équipe.", "La Porte est ouverte. Allez-y !"]), { hold: false, flush: true }));
+        if (el >= 15300) once("zoom", () => $("#gatescr").classList.add("zoom"));
+        if (el >= 16300) once("travel", () => { if (!this.low()) Cine.play("travel"); else Cine.stop(); Sfx.sg("whoosh"); });
+        if (el >= 18300) once("w2", () => Sfx.sg("whoosh"));
+        if (el >= 20300) once("flash", () => Cine.white(700));
+      }
+      this.gateT = setTimeout(step, 90);
     };
-    this.gateT = setTimeout(stepF, 500);
+    step();
   },
+  low() { return document.documentElement.classList.contains("lowfx"); },
   renderScene() {
     const g = this.game, now = Date.now(), v = g.tvView(now), sc = v.scene, s = v.step;
     if (!sc || !s) return;
+    if (Cine.mode === "travel" || Cine.mode === "horizon" || Cine.mode === "kawoosh") Cine.stop();
     this.bg(sc.env);
     this.build("scene", '<div class="screen" id="scene"></div>');
     this.hud(v);
@@ -898,8 +1203,8 @@ const TV = {
       h = '<div class="k">Exploration</div><h2>Consultez vos téléphones</h2><p>📱 Chacun a reçu des <b>informations confidentielles</b> sur cette scène. Partagez ce qui vous semble utile… ou gardez-le pour vous.</p><p class="info">Les pouvoirs de rôle (scan, mémoire, intervention…) s\'utilisent depuis le téléphone.</p><div class="vcount" id="rk"></div>';
     } else if (kind === "vote") {
       k += JSON.stringify(s.choices) + s.ordre + v.scene.n;
-      h = '<div class="k">🗳️ Vote secret</div>' + s.choices.map((c, i) => '<div class="ch"><div class="l">' + LET[i] + '</div><div><b>' + esc(c.label) + '</b>' + (c.desc ? '<span>' + esc(c.desc) + '</span>' : "") + (c.tags.length ? '<div class="tags">' + c.tags.map(t => '<i>' + esc(t) + '</i>').join("") + '</div>' : "") + '</div></div>').join("") +
-        (s.locked || []).map(c => '<div class="ch lock"><div class="l">🔒</div><div><b>' + esc(c.label) + '</b><span>' + esc(c.why) + '</span></div></div>').join("") +
+      h = '<div class="k">🗳️ Vote secret</div><div class="chl' + (s.choices.length + (s.locked || []).length > 4 ? " many" : "") + '">' + s.choices.map((c, i) => '<div class="ch"><div class="l">' + LET[i] + '</div><div><b>' + esc(c.label) + '</b>' + (c.desc ? '<span>' + esc(c.desc) + '</span>' : "") + (c.tags.length ? '<div class="tags">' + c.tags.map(t => '<i>' + esc(t) + '</i>').join("") + '</div>' : "") + '</div></div>').join("") +
+        (s.locked || []).map(c => '<div class="ch lock"><div class="l">🔒</div><div><b>' + esc(c.label) + '</b><span>' + esc(c.why) + '</span></div></div>').join("") + '</div>' +
         '<div class="vcount"><span id="vk"></span>' + (s.ordre ? '<span class="ord">🎖️ ORDRE DE MISSION</span>' : "") + '</div>';
     } else if (kind === "puzzle") {
       const P = s.puzzle; k += JSON.stringify([P.tries.length, P.attempts, v.scene.n]);
@@ -930,7 +1235,7 @@ const TV = {
     c.classList.remove("off"); c.classList.toggle("low", r < 10000);
     c.querySelector(".ring").style.strokeDashoffset = (326.7 * (1 - f)).toFixed(1);
     c.querySelector("b").textContent = Math.ceil(r / 1000);
-    if (s.kind === "vote" || s.kind === "puzzle") { const sec = Math.ceil(r / 1000); if (sec <= 5 && sec > 0 && sec !== this.lastTick && !this.game.st.paused) { this.lastTick = sec; Sfx.play("tick"); } }
+    if ((s.kind === "vote" || s.kind === "puzzle") && !s.heldAt) { const sec = Math.ceil(r / 1000); if (sec === 10 && this.lastTen !== s.until) { this.lastTen = s.until; if (!Narr.speaking()) Narr.say(Narr.pick(["Dix secondes !", "Plus que dix secondes.", "Dix secondes, équipe !"]), { hold: false }); } if (sec <= 5 && sec > 0 && sec !== this.lastTick && !this.game.st.paused) { this.lastTick = sec; Sfx.play("tick"); } }
   },
   renderEnding() {
     const E = this.game.st.ending, m = this.game.M(), T = SG.ENDINGS[E.type]; this.bg(m.env === "base" ? "base" : m.env === "jungle" ? "jungle" : m.env === "ice" ? "ice" : "outpost");
@@ -954,7 +1259,7 @@ const TV = {
         '<button class="tvbtn" data-act="voldown">🔉 VOLUME − (' + S.config.volume + ' %)</button><button class="tvbtn" data-act="volup">🔊 VOLUME +</button><button class="tvbtn" data-act="music">🎵 MUSIQUE : ' + (S.config.music ? "OUI" : "NON") + '</button><button class="tvbtn" data-act="tohome2">⌂ ACCUEIL (mission conservée)</button>' +
         '<button class="tvbtn" data-act="stop">⏹ ARRÊTER LA MISSION</button><button class="tvbtn blue" data-act="closemenu">✕ FERMER</button>';
     }
-    $("#stage").insertAdjacentHTML("beforeend", '<div class="ov" id="menu"><div class="menu">' + html + '</div></div>');
+    $("#stage").insertAdjacentHTML("beforeend", '<div class="ov" id="menu"><div class="menu">' + html + '</div></div>'); Narr.stop(true);
     const f = $("#menu .tvbtn"); if (f) f.focus();
   },
   closeMenu() { const m = $("#menu"); if (m) m.remove(); },
@@ -970,7 +1275,7 @@ const TV = {
       case "rules": this.show("rules"); break;
       case "archives": this.show("archives"); break;
       case "home": case "tohome": if (g.st.phase === "ending") g.toLobby(); this.show("home"); break;
-      case "tohome2": this.closeMenu(); if (!g.st.paused) g.pause(now, "organisateur"); this.show("home"); break;
+      case "tohome2": this.closeMenu(); if (!g.st.paused) g.pause(now, "organisateur"); Narr.stop(); Cine.stop(); this.show("home"); break;
       case "resume_game": this.show("game"); break;
       case "abandon": g.toLobby(); this.show("home"); this.toast("Mission abandonnée"); break;
       case "cyc": this.cycle(+el.dataset.row, 1); break;
@@ -981,13 +1286,13 @@ const TV = {
       case "kickmenu": this.openMenu("kick"); break;
       case "kickp": g.kick(el.dataset.pid, now); this.net.send(el.dataset.pid, { type: "kicked" }); this.openMenu("kick"); this.toast("Joueur retiré"); break;
       case "closemenu": this.closeMenu(); break;
-      case "pause": g.pause(now, "organisateur"); this.closeMenu(); break;
+      case "pause": g.pause(now, "organisateur"); Narr.stop(); this.closeMenu(); break;
       case "resume": g.resume(now); this.closeMenu(); break;
       case "next": if (!g.advance(now)) this.toast("Rien à passer pour l'instant"); this.closeMenu(); break;
       case "reconnect": this.net.close(); this.lastViews = {}; this.connect(); this.toast("Connexion relancée"); this.closeMenu(); break;
       case "voldown": case "volup": g.applyConfig({ volume: g.st.config.volume + (a === "volup" ? 10 : -10) }); this.saveCfg(); this.openMenu(); break;
       case "music": g.applyConfig({ music: !g.st.config.music }); this.saveCfg(); this.openMenu(); break;
-      case "stop": g.toLobby(); this.closeMenu(); this.show("lobby"); this.toast("Mission arrêtée"); break;
+      case "stop": g.toLobby(); Narr.stop(); Cine.stop(); this.closeMenu(); this.show("lobby"); this.toast("Mission arrêtée"); break;
       case "retry": location.reload(); break;
       case "fresh": store.del("sg_state"); location.reload(); break;
     }
@@ -995,7 +1300,7 @@ const TV = {
   key(e) {
     Sfx.unlock();
     const k = e.key, g = this.game, S = g.st, menu = $("#menu");
-    if (k === " " || k === "MediaPlayPause" || e.keyCode === 179) { if (this.screen !== "game") return; e.preventDefault(); if (S.paused) g.resume(Date.now()); else g.pause(Date.now(), "organisateur"); return; }
+    if (k === " " || k === "MediaPlayPause" || e.keyCode === 179) { if (this.screen !== "game") return; e.preventDefault(); if (S.paused) g.resume(Date.now()); else { g.pause(Date.now(), "organisateur"); Narr.stop(); } return; }
     if (k === "ContextMenu" || k === "m" || k === "M") { e.preventDefault(); if (menu) this.closeMenu(); else if (this.screen === "game" && S.phase !== "ending") this.openMenu(); return; }
     if (k === "Escape" || k === "Backspace" || k === "GoBack" || k === "BrowserBack") {
       e.preventDefault();
@@ -1008,7 +1313,7 @@ const TV = {
       return;
     }
     const f = document.activeElement;
-    if (this.screen === "settings" && f && f.classList.contains("row") && (k === "ArrowLeft" || k === "ArrowRight")) { e.preventDefault(); this.cycle(+f.dataset.row, k === "ArrowRight" ? 1 : -1); return; }
+    // Paramètres : les flèches déplacent seulement le curseur (deux colonnes) ; OK fait défiler la valeur.
     if ((k === "Enter" || k === "OK") && f && f.tagName === "BUTTON") return;
     if ((k === "Enter" || k === "OK") && this.screen === "game" && !menu && S.phase !== "ending") { e.preventDefault(); if (S.paused) { g.resume(Date.now()); return; } this.openMenu(); return; }
     if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(k)) {
@@ -1116,7 +1421,7 @@ const PH = {
   },
   feedback(kind, txt) { this.fb = { kind, txt, at: Date.now(), k: this.stepKey() }; const el = $("#fb"); if (el) { el.className = "fb " + kind; el.textContent = txt; } },
   stepKey() { const v = this.v; return v ? v.phase + ":" + (v.scene ? v.scene.n + v.scene.step : "") : ""; },
-  remain() { const v = this.v; if (!v) return 0; const r = v.scene ? v.scene.remain : v.remain; if (v.paused) return r; return Math.max(0, (r || 0) - (Date.now() - this.vAt)); },
+  remain() { const v = this.v; if (!v) return 0; const r = v.scene ? v.scene.remain : v.remain; if (v.paused || v.held) return r; return Math.max(0, (r || 0) - (Date.now() - this.vAt)); },
   tickUi() {
     const v = this.v; if (!v) return;
     const bar = $("#tbar i"), len = v.len; if (bar && len) { const r = this.remain(); bar.style.width = (100 * r / len) + "%"; $("#tbar").classList.toggle("low", r < 10000); const t = $("#tleft"); if (t) t.textContent = Math.ceil(r / 1000) + " s"; }

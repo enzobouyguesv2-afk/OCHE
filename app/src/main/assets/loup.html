@@ -159,6 +159,19 @@ body.tv{font-size:clamp(16px,1.35vw,26px);overflow:hidden;height:100vh}
 .gamefoot{display:flex;gap:.8vw;justify-content:center;flex-wrap:wrap}
 .votes{display:flex;flex-wrap:wrap;gap:.4vw 1.2vw;justify-content:center;color:#d2cdea;max-width:80vw}
 .votes b{color:var(--moon)}
+/* télé en 960×540 et écrans peu hauts : tout tient sans défilement */
+.stage{min-height:0;overflow:hidden}
+@media (max-height:700px){
+  .app{padding:1.4vw 3vw}
+  .bar{margin-bottom:.8vw}
+  .game{gap:.8vw}
+  .stage{gap:.7vw}
+  .narr{font-size:clamp(20px,min(3.3vw,6.2vh),62px)}
+  .timer{width:clamp(76px,min(9vw,16vh),170px)}
+  .hab{padding:.4vw .6vw}
+  .village{gap:.5vw}
+  .addr{font-size:.85em}
+}
 .overlay{position:fixed;inset:0;z-index:20;background:rgba(5,5,12,.86);display:grid;place-items:center;backdrop-filter:blur(4px)}
 .overlay .box{display:grid;gap:1.2vw;justify-items:center;text-align:center;max-width:70vw}
 .overlay .box .btn{min-width:22vw}
@@ -168,7 +181,10 @@ body.tv{font-size:clamp(16px,1.35vw,26px);overflow:hidden;height:100vh}
 .victory{display:grid;align-content:center;gap:1.2vw}
 .victory .k{letter-spacing:.4em;text-transform:uppercase;color:var(--gold);font-weight:800}
 .victory h2{font-size:clamp(48px,6vw,116px);line-height:.95;font-weight:900;animation:glow 3s ease-in-out infinite alternate}
-.victory.village h2{color:#9be3b6}.victory.loups h2{color:#ff6b63}.victory.amoureux h2{color:var(--rose)}.victory.solo h2{color:#c7b3ff}
+.victory.w-village h2{color:#9be3b6}.victory.w-loups h2{color:#ff6b63}.victory.w-amoureux h2{color:var(--rose)}.victory.w-solo h2{color:#c7b3ff}
+.victory{min-height:0;overflow:hidden}
+.victory h2{font-size:clamp(34px,min(6vw,10vh),116px)}
+.end .panel.scroll{min-height:0;max-height:100%}
 @keyframes glow{from{text-shadow:0 0 20px rgba(255,255,255,.12)}to{text-shadow:0 0 60px currentColor}}
 .timeline{display:grid;gap:.5vw;font-size:.92em}
 .timeline div{border-left:3px solid var(--line);padding-left:.8vw}
@@ -540,7 +556,7 @@ function gameHTML(p){
     <div style="display:grid;gap:1vw">${village}<div class="gamefoot">${foot}</div></div></div>`;
 }
 function endHTML(p){
-  const cls={village:"village",loups:"loups",amoureux:"amoureux",personne:"solo"}[p.winner]||"solo";
+  const cls="w-"+({village:"village",loups:"loups",amoureux:"amoureux",personne:"solo"}[p.winner]||"solo");
   const title={village:"Victoire du village",loups:"Victoire des loups",amoureux:"Victoire des amoureux",flute:"Victoire du joueur de flûte",loupblanc:"Victoire du loup blanc",ange:"Victoire de l'ange",personne:"Village désert"}[p.winner]||"Fin de partie";
   return `<div class="end"><div class="victory ${cls}"><div class="k">Fin de partie</div><h2>${title}</h2><p class="sub" style="margin:0">${esc(p.narr)}</p>
     <div class="village">${p.players.map((x,i)=>`<div class="hab ${x.a?"":"dead"} ${x.win?"win":""}"><span class="s">${i+1}</span><b>${esc(x.n)}${x.l?" 💘":""}${x.ch?" 🎵":""}</b><span>${esc((x.ic||"")+" "+(x.r||""))}</span>${x.win?`<span class="tag">🏆</span>`:""}</div>`).join("")}</div>

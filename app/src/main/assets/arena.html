@@ -151,7 +151,8 @@ html.pad body{position:fixed;inset:0;width:100%}
 .psel h2{font-size:32px;text-align:center}
 .psel>*,.pm>*{flex-shrink:0}
 @media (orientation:landscape) and (max-height:500px){.psel .pgrid{max-width:420px;margin:0 auto;width:100%}.psel h2{font-size:26px}.pm h1{font-size:48px}.pm{gap:10px;padding:14px 20px}}
-.psel .pgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.psel .pgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;position:static;transform:none;left:auto;bottom:auto}
+.pc b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pc{background:var(--a);padding:4px;outline:3px solid transparent}.pc img{width:100%;display:block}.pc b{font-family:var(--fd);font-size:20px;display:block;padding-top:2px}
 .pc.sel{outline-color:var(--c)}
 .pinfo{text-align:center;font-family:var(--fd);font-size:24px}.pinfo small{font-family:var(--fb);font-size:14px;color:var(--m)}
